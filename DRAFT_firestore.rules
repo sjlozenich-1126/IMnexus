@@ -273,6 +273,43 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidVaultFile(data, fileId) {
+      return data.keys().hasAll([
+          'fileId', 'ownerId', 'memberUids', 'fileName', 'mimeType',
+          'fileSize', 'sha256', 'chunkCount', 'keyB64', 'isPublic',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'fileId', 'ownerId', 'memberUids', 'fileName', 'mimeType',
+          'fileSize', 'sha256', 'chunkCount', 'keyB64', 'isPublic',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.fileId) && data.fileId == fileId
+        && isValidId(data.ownerId)
+        && isBoundedStringList(data.memberUids, 20)
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 260
+        && data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 160
+        && data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 15728640
+        && data.sha256 is string && data.sha256.size() >= 16 && data.sha256.size() <= 128
+        && data.chunkCount is number && data.chunkCount >= 1 && data.chunkCount <= 40
+        && data.keyB64 is string && data.keyB64.size() >= 16 && data.keyB64.size() <= 200
+        && data.isPublic is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVaultChunk(data, fileId, chunkId) {
+      return data.keys().hasAll(['id', 'fileId', 'index', 'ivB64', 'dataB64', 'ownerId', 'createdAt'])
+        && data.keys().hasOnly(['id', 'fileId', 'index', 'ivB64', 'dataB64', 'ownerId', 'createdAt'])
+        && isValidId(data.id) && data.id == chunkId
+        && isValidId(data.fileId) && data.fileId == fileId
+        && data.index is number && data.index >= 0 && data.index < 40
+        && data.ivB64 is string && data.ivB64.size() >= 8 && data.ivB64.size() <= 64
+        && data.dataB64 is string && data.dataB64.size() >= 1 && data.dataB64.size() <= 900000
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp;
+    }
+
     // Relational helpers for parent case
     function isCaseMember(caseData) {
       return isSignedIn() && (
@@ -528,7 +565,7 @@ service cloud.firestore {
       allow create: if isValidSlug(slug)
         && isVerifiedUser()
         && isValidPublicSite(incoming(), slug)
-        && incoming().ownerId == request.auth.uid
+        && (incoming().ownerId == request.auth.uid || isAdmin())
         && incoming().updatedAt == request.time
         && exists(/databases/$(database)/documents/cases/$(incoming().caseId));
       allow update: if isValidSlug(slug)
@@ -547,6 +584,62 @@ service cloud.firestore {
           'collections', 'updatedAt'
         ]);
       allow delete: if isValidSlug(slug) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+
+    match /vaultFiles/{fileId} {
+      allow get: if isValidId(fileId) && (
+        existing().isPublic == true ||
+        (isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids))
+      );
+      allow list: if existing().isPublic == true || (
+        isSignedIn() && (isBootstrappedAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids)
+      );
+      allow create: if isValidId(fileId)
+        && isVerifiedUser()
+        && isValidVaultFile(incoming(), fileId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(fileId)
+        && isVerifiedUser()
+        && isValidVaultFile(incoming(), fileId)
+        && incoming().fileId == existing().fileId
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isPublic', 'memberUids', 'updatedAt']);
+      allow delete: if isValidId(fileId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+
+      match /chunks/{chunkId} {
+        allow get: if isValidId(fileId) && isValidId(chunkId) && (
+          get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.isPublic == true ||
+          (isSignedIn() && (
+            isAdmin() ||
+            get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.ownerId == request.auth.uid ||
+            request.auth.uid in get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.memberUids
+          ))
+        );
+        allow list: if isValidId(fileId) && (
+          get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.isPublic == true ||
+          (isSignedIn() && (
+            isAdmin() ||
+            get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.ownerId == request.auth.uid ||
+            request.auth.uid in get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.memberUids
+          ))
+        );
+        allow create: if isValidId(fileId) && isValidId(chunkId)
+          && isVerifiedUser()
+          && isValidVaultChunk(incoming(), fileId, chunkId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/vaultFiles/$(fileId))
+          && (get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.ownerId == request.auth.uid || isAdmin());
+        allow update: if false;
+        allow delete: if isValidId(fileId) && isValidId(chunkId)
+          && isVerifiedUser()
+          && (get(/databases/$(database)/documents/vaultFiles/$(fileId)).data.ownerId == request.auth.uid || isAdmin());
+      }
     }
   }
 }

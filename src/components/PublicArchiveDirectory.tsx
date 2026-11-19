@@ -3,6 +3,7 @@ import { ArrowRight, Globe, Moon, Search, Sun } from 'lucide-react';
 import type { PublicSite } from '../types';
 import { fetchAllPublishedSites } from '../services/firestoreService';
 import { BrandMark, StatusLabel } from './BrandMark';
+import { VaultImage } from './VaultMedia';
 
 interface PublicArchiveDirectoryProps {
   darkMode: boolean;
@@ -128,13 +129,12 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
                 className="text-left bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden hover:border-[#3061d0] transition-colors flex flex-col cursor-pointer"
               >
                 <div className="aspect-[16/9] bg-zinc-900 relative overflow-hidden">
-                  <img
+                  <VaultImage
                     src={
                       site.coverUrl ||
                       '/assets/aistudio/maxim-berg-fKPZGJI4dXU-unsplash_b5b78643.jpg'
                     }
                     alt={site.headline || site.title}
-                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover opacity-85"
                   />
                 </div>

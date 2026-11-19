@@ -6,8 +6,6 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  or,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -180,26 +178,53 @@ export function subscribeCases(
 ): Unsubscribe {
   const path = 'cases';
   const baseRef = collection(db, path);
-  const q =
-    userRole === 'admin'
-      ? query(baseRef)
-      : query(
-          baseRef,
-          or(
-            where('ownerId', '==', user.uid),
-            where('memberUids', 'array-contains', user.uid),
-            where('invitedEmails', 'array-contains', (user.email || '').toLowerCase())
-          )
-        );
+  if (userRole === 'admin') {
+    return onSnapshot(
+      baseRef,
+      (snap) => {
+        onChange(snap.docs.map((d) => d.data() as CaseRecord));
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, path)
+    );
+  }
 
-  return onSnapshot(
-    q,
+  const memberDocs = new Map<string, CaseRecord>();
+  const invitedDocs = new Map<string, CaseRecord>();
+
+  const emitMerged = () => {
+    const merged = new Map<string, CaseRecord>();
+    memberDocs.forEach((v, k) => merged.set(k, v));
+    invitedDocs.forEach((v, k) => merged.set(k, v));
+    onChange(Array.from(merged.values()));
+  };
+
+  const unsubMember = onSnapshot(
+    query(baseRef, where('memberUids', 'array-contains', user.uid)),
     (snap) => {
-      const list = snap.docs.map((d) => d.data() as CaseRecord);
-      onChange(list);
+      memberDocs.clear();
+      snap.docs.forEach((d) => memberDocs.set(d.id, d.data() as CaseRecord));
+      emitMerged();
     },
     (err) => handleFirestoreError(err, OperationType.LIST, path)
   );
+
+  const normalizedEmail = (user.email || '').trim().toLowerCase();
+  const unsubInvited = normalizedEmail
+    ? onSnapshot(
+        query(baseRef, where('invitedEmails', 'array-contains', normalizedEmail)),
+        (snap) => {
+          invitedDocs.clear();
+          snap.docs.forEach((d) => invitedDocs.set(d.id, d.data() as CaseRecord));
+          emitMerged();
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, path)
+      )
+    : () => {};
+
+  return () => {
+    unsubMember();
+    unsubInvited();
+  };
 }
 
 export function subscribeVaultItems(
@@ -212,13 +237,7 @@ export function subscribeVaultItems(
   const q =
     userRole === 'admin'
       ? query(baseRef)
-      : query(
-          baseRef,
-          or(
-            where('ownerId', '==', user.uid),
-            where('memberUids', 'array-contains', user.uid)
-          )
-        );
+      : query(baseRef, where('memberUids', 'array-contains', user.uid));
 
   return onSnapshot(
     q,
@@ -240,13 +259,7 @@ export function subscribeCollections(
   const q =
     userRole === 'admin'
       ? query(baseRef)
-      : query(
-          baseRef,
-          or(
-            where('ownerId', '==', user.uid),
-            where('memberUids', 'array-contains', user.uid)
-          )
-        );
+      : query(baseRef, where('memberUids', 'array-contains', user.uid));
 
   return onSnapshot(
     q,
@@ -267,13 +280,16 @@ export function subscribeActivityLogs(
   const baseRef = collection(db, path);
   const q =
     userRole === 'admin'
-      ? query(baseRef, orderBy('createdAt', 'desc'))
-      : query(baseRef, where('ownerId', '==', user.uid), orderBy('createdAt', 'desc'));
+      ? query(baseRef)
+      : query(baseRef, where('ownerId', '==', user.uid));
 
   return onSnapshot(
     q,
     (snap) => {
-      const list = snap.docs.slice(0, 20).map((d) => d.data() as ActivityLog);
+      const list = snap.docs
+        .map((d) => d.data() as ActivityLog & { createdAt?: { toMillis?: () => number } })
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+        .slice(0, 20);
       onChange(list);
     },
     (err) => handleFirestoreError(err, OperationType.LIST, path)
@@ -1021,10 +1037,16 @@ export async function publishCaseToPublicSite(params: {
       (c) => c.isPublic && (!c.caseId || c.caseId === caseRecord.id)
     );
 
-    // Ensure all public files and collection cover files are marked public on the encrypted file server
+    // Ensure all public files, case cover, and collection cover files are marked public in Cloud Firestore
     await Promise.all([
       ...publicDocs.filter((d) => d.fileId).map((d) => syncVaultFileVisibility(d.fileId!, true)),
       ...publicEv.filter((e) => e.fileId).map((e) => syncVaultFileVisibility(e.fileId!, true)),
+      ...publicCols
+        .filter((c) => c.coverImageUrl)
+        .map((c) => syncVaultFileVisibility(c.coverImageUrl!, true)),
+      ...(caseRecord.publicCoverUrl
+        ? [syncVaultFileVisibility(caseRecord.publicCoverUrl, true)]
+        : []),
     ]);
 
     const itemById = new Map(vaultItems.map((v) => [v.id, v]));

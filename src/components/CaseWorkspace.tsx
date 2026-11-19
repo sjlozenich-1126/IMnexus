@@ -1554,7 +1554,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             const uploaded = await uploadEncryptedVaultFile(f, true);
                             setForm({
                               ...form,
-                              publicCoverUrl: `/api/vault/file/${uploaded.fileId}`,
+                              publicCoverUrl: `vault://${uploaded.fileId}`,
                             });
                           }}
                         />

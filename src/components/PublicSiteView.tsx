@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  Download,
   ExternalLink,
   FileText,
   Film,
-  Image as ImageIcon,
   Layers,
   Moon,
   Music,
@@ -16,8 +14,9 @@ import {
 import type { MediaType, PublicSite } from '../types';
 import { fetchPublicSiteBySlug } from '../services/firestoreService';
 import { exportPublicSitePdf } from '../utils/exportReports';
-import { formatBytes, getVaultFileUrl } from '../utils/vaultApi';
+import { formatBytes } from '../utils/vaultApi';
 import { BrandMark, StatusLabel } from './BrandMark';
+import { VaultDownloadLink, VaultImage, useResolvedVaultUrl } from './VaultMedia';
 
 interface PublicSiteViewProps {
   slug: string;
@@ -37,6 +36,65 @@ interface PreviewArtifact {
   textContent?: string;
   description?: string;
 }
+
+const PublicMediaLightboxStage: React.FC<{ previewItem: PreviewArtifact }> = ({
+  previewItem,
+}) => {
+  const { url, loading, error } = useResolvedVaultUrl(previewItem.fileId);
+
+  if (!previewItem.fileId || previewItem.mediaType === 'text') return null;
+
+  if (loading) {
+    return (
+      <div className="p-8 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
+        Decrypting verified archival exhibit...
+      </div>
+    );
+  }
+
+  if (error || !url) {
+    return (
+      <div className="p-6 bg-red-50 dark:bg-red-950/30 rounded border border-red-200 dark:border-red-900 text-center text-xs text-red-600 dark:text-red-300">
+        Unable to load decrypted file artifact.
+      </div>
+    );
+  }
+
+  if (previewItem.mediaType === 'image') {
+    return (
+      <img
+        src={url}
+        alt={previewItem.title}
+        referrerPolicy="no-referrer"
+        className="max-h-[60vh] mx-auto rounded border border-zinc-200 dark:border-zinc-800"
+      />
+    );
+  }
+
+  if (previewItem.mediaType === 'video') {
+    return <video src={url} controls className="w-full max-h-[60vh] rounded bg-black" />;
+  }
+
+  if (previewItem.mediaType === 'audio') {
+    return (
+      <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800">
+        <audio src={url} controls className="w-full" />
+      </div>
+    );
+  }
+
+  if (previewItem.mediaType === 'pdf') {
+    return (
+      <iframe
+        title={previewItem.title}
+        src={url}
+        className="w-full h-[60vh] rounded border border-zinc-200 dark:border-zinc-800"
+      />
+    );
+  }
+
+  return null;
+};
 
 export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
   slug,
@@ -214,10 +272,9 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
 
       {/* Editorial Hero */}
       <section className="relative border-b border-zinc-200 dark:border-zinc-800 bg-zinc-950 text-white overflow-hidden">
-        <img
+        <VaultImage
           src={coverSrc}
           alt={site.headline || site.title}
-          referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover opacity-55"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/55 to-black/35" />
@@ -424,10 +481,9 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
                   >
                     <div className="aspect-[16/9] bg-zinc-100 dark:bg-zinc-900 relative overflow-hidden">
                       {col.coverImageUrl ? (
-                        <img
+                        <VaultImage
                           src={col.coverImageUrl}
                           alt={col.title}
-                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -578,7 +634,6 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {site.evidence!.map((item) => {
-                  const fileUrl = getVaultFileUrl(item.fileId, null, true);
                   return (
                     <button
                       key={item.id}
@@ -587,11 +642,10 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
                       className="text-left bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden hover:border-[#3061d0] transition-colors cursor-pointer"
                     >
                       <div className="aspect-[16/10] bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center overflow-hidden">
-                        {item.mediaType === 'image' && fileUrl ? (
-                          <img
-                            src={fileUrl}
+                        {item.mediaType === 'image' && item.fileId ? (
+                          <VaultImage
+                            src={item.fileId}
                             alt={item.title}
-                            referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                           />
                         ) : item.mediaType === 'video' ? (
@@ -671,37 +725,7 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
             </div>
 
             <div className="p-5 overflow-auto flex-1 space-y-4">
-              {previewItem.fileId && previewItem.mediaType === 'image' && (
-                <img
-                  src={getVaultFileUrl(previewItem.fileId, null, true)}
-                  alt={previewItem.title}
-                  referrerPolicy="no-referrer"
-                  className="max-h-[60vh] mx-auto rounded border border-zinc-200 dark:border-zinc-800"
-                />
-              )}
-              {previewItem.fileId && previewItem.mediaType === 'video' && (
-                <video
-                  src={getVaultFileUrl(previewItem.fileId, null, true)}
-                  controls
-                  className="w-full max-h-[60vh] rounded bg-black"
-                />
-              )}
-              {previewItem.fileId && previewItem.mediaType === 'audio' && (
-                <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800">
-                  <audio
-                    src={getVaultFileUrl(previewItem.fileId, null, true)}
-                    controls
-                    className="w-full"
-                  />
-                </div>
-              )}
-              {previewItem.fileId && previewItem.mediaType === 'pdf' && (
-                <iframe
-                  title={previewItem.title}
-                  src={getVaultFileUrl(previewItem.fileId, null, true)}
-                  className="w-full h-[60vh] rounded border border-zinc-200 dark:border-zinc-800"
-                />
-              )}
+              <PublicMediaLightboxStage previewItem={previewItem} />
               {previewItem.textContent && (
                 <div className="p-5 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-sm leading-relaxed whitespace-pre-line font-serif-editorial">
                   {previewItem.textContent}
@@ -717,14 +741,11 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
                   {previewItem.sha256 ? `SHA-256: ${previewItem.sha256}` : 'Verified Record'}
                 </div>
                 {previewItem.fileId && (
-                  <a
-                    href={getVaultFileUrl(previewItem.fileId, null, true)}
-                    download={previewItem.fileName || previewItem.title}
-                    className="inline-flex items-center gap-1.5 font-semibold text-[#3061d0] dark:text-blue-400 hover:underline"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download Original File</span>
-                  </a>
+                  <VaultDownloadLink
+                    fileId={previewItem.fileId}
+                    fileName={previewItem.fileName || previewItem.title}
+                    className="inline-flex items-center gap-1.5 font-semibold text-[#3061d0] dark:text-blue-400 hover:underline cursor-pointer"
+                  />
                 )}
               </div>
             </div>

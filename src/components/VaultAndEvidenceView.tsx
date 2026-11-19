@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   CheckSquare,
-  Download,
   ExternalLink,
   FileText,
   Film,
@@ -36,11 +35,70 @@ import {
 import {
   deleteVaultFileAsset,
   formatBytes,
-  getVaultFileUrl,
   inferMediaType,
   uploadEncryptedVaultFile,
 } from '../utils/vaultApi';
 import { StatusLabel } from './BrandMark';
+import { VaultDownloadLink, VaultImage, useResolvedVaultUrl } from './VaultMedia';
+
+const VaultItemPreviewStage: React.FC<{ item: VaultItem }> = ({ item }) => {
+  const { url, loading, error } = useResolvedVaultUrl(item.fileId);
+
+  return (
+    <div className="lg:col-span-7 space-y-3">
+      {item.fileId && item.mediaType !== 'text' && loading && (
+        <div className="p-8 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
+          Decrypting AES-256-GCM asset from cloud vault...
+        </div>
+      )}
+      {item.fileId && item.mediaType !== 'text' && error && (
+        <div className="p-6 bg-red-50 dark:bg-red-950/30 rounded border border-red-200 dark:border-red-900 text-center text-xs text-red-600 dark:text-red-300">
+          Unable to decrypt file from cloud vault. Verify permissions or re-upload the asset.
+        </div>
+      )}
+      {item.fileId && !loading && !error && url && item.mediaType === 'image' && (
+        <img
+          src={url}
+          alt={item.title}
+          referrerPolicy="no-referrer"
+          className="w-full max-h-[52vh] object-contain bg-zinc-100 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800"
+        />
+      )}
+      {item.fileId && !loading && !error && url && item.mediaType === 'video' && (
+        <video src={url} controls className="w-full max-h-[52vh] rounded bg-black" />
+      )}
+      {item.fileId && !loading && !error && url && item.mediaType === 'audio' && (
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800">
+          <audio src={url} controls className="w-full" />
+        </div>
+      )}
+      {item.fileId && !loading && !error && url && item.mediaType === 'pdf' && (
+        <iframe
+          title={item.title}
+          src={url}
+          className="w-full h-[52vh] rounded border border-zinc-200 dark:border-zinc-800"
+        />
+      )}
+      {item.textContent && (
+        <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-sm whitespace-pre-line font-serif-editorial leading-relaxed">
+          {item.textContent}
+        </div>
+      )}
+      {item.fileId && item.mediaType === 'file' && (
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-center space-y-2">
+          <FileText className="w-8 h-8 text-zinc-400 mx-auto" />
+          <div className="text-sm font-semibold">{item.fileName}</div>
+          <div className="text-xs text-zinc-500">{formatBytes(item.fileSize)}</div>
+        </div>
+      )}
+      {item.sha256 && (
+        <div className="text-[11px] font-mono-tabular text-zinc-500 break-all">
+          SHA-256: {item.sha256}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface VaultAndEvidenceViewProps {
   mode: 'documents' | 'evidence';
@@ -162,9 +220,7 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
       const firstSelectedImg = items.find(
         (i) => selectedIds.includes(i.id) && i.mediaType === 'image' && i.fileId
       );
-      setColCoverUrl(
-        firstSelectedImg ? getVaultFileUrl(firstSelectedImg.fileId, idToken, firstSelectedImg.isPublic) : ''
-      );
+      setColCoverUrl(firstSelectedImg ? `vault://${firstSelectedImg.fileId}` : '');
       setColCaseId('');
       setColTags('');
       setColIsPublic(false);
@@ -254,7 +310,7 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
   const handleCoverImageUpload = async (file: File) => {
     try {
       const uploaded = await uploadEncryptedVaultFile(file, true);
-      setColCoverUrl(`/api/vault/file/${uploaded.fileId}`);
+      setColCoverUrl(`vault://${uploaded.fileId}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to upload cover image.');
     }
@@ -447,10 +503,9 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                 >
                   {col.coverImageUrl && (
                     <div className="h-24 bg-zinc-100 dark:bg-zinc-900 overflow-hidden">
-                      <img
+                      <VaultImage
                         src={col.coverImageUrl}
                         alt={col.title}
-                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -580,7 +635,6 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
           {filteredItems.map((item) => {
             const isSelected = selectedIds.includes(item.id);
-            const fileUrl = getVaultFileUrl(item.fileId, idToken, item.isPublic);
             const firstCaseNum =
               item.caseIds.length > 0
                 ? caseMap.get(item.caseIds[0])?.caseNumber || item.caseIds[0]
@@ -619,11 +673,10 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                     {item.mediaType}
                   </span>
 
-                  {item.mediaType === 'image' && fileUrl ? (
-                    <img
-                      src={fileUrl}
+                  {item.mediaType === 'image' && item.fileId ? (
+                    <VaultImage
+                      src={item.fileId}
                       alt={item.title}
-                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
                   ) : item.mediaType === 'video' ? (
@@ -1060,58 +1113,7 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
             </div>
 
             <div className="p-5 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-7 space-y-3">
-                {activeItem.fileId && activeItem.mediaType === 'image' && (
-                  <img
-                    src={getVaultFileUrl(activeItem.fileId, idToken, activeItem.isPublic)}
-                    alt={activeItem.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full max-h-[52vh] object-contain bg-zinc-100 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800"
-                  />
-                )}
-                {activeItem.fileId && activeItem.mediaType === 'video' && (
-                  <video
-                    src={getVaultFileUrl(activeItem.fileId, idToken, activeItem.isPublic)}
-                    controls
-                    className="w-full max-h-[52vh] rounded bg-black"
-                  />
-                )}
-                {activeItem.fileId && activeItem.mediaType === 'audio' && (
-                  <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800">
-                    <audio
-                      src={getVaultFileUrl(activeItem.fileId, idToken, activeItem.isPublic)}
-                      controls
-                      className="w-full"
-                    />
-                  </div>
-                )}
-                {activeItem.fileId && activeItem.mediaType === 'pdf' && (
-                  <iframe
-                    title={activeItem.title}
-                    src={getVaultFileUrl(activeItem.fileId, idToken, activeItem.isPublic)}
-                    className="w-full h-[52vh] rounded border border-zinc-200 dark:border-zinc-800"
-                  />
-                )}
-                {activeItem.textContent && (
-                  <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-sm whitespace-pre-line font-serif-editorial leading-relaxed">
-                    {activeItem.textContent}
-                  </div>
-                )}
-                {activeItem.fileId && activeItem.mediaType === 'file' && (
-                  <div className="p-6 bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800 text-center space-y-2">
-                    <FileText className="w-8 h-8 text-zinc-400 mx-auto" />
-                    <div className="text-sm font-semibold">{activeItem.fileName}</div>
-                    <div className="text-xs text-zinc-500">
-                      {formatBytes(activeItem.fileSize)}
-                    </div>
-                  </div>
-                )}
-                {activeItem.sha256 && (
-                  <div className="text-[11px] font-mono-tabular text-zinc-500 break-all">
-                    SHA-256: {activeItem.sha256}
-                  </div>
-                )}
-              </div>
+              <VaultItemPreviewStage item={activeItem} />
 
               <div className="lg:col-span-5 space-y-4">
                 <div>
@@ -1192,14 +1194,11 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
 
                 <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap gap-2">
                   {activeItem.fileId && (
-                    <a
-                      href={getVaultFileUrl(activeItem.fileId, idToken, activeItem.isPublic)}
-                      download={activeItem.fileName || activeItem.title}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download</span>
-                    </a>
+                    <VaultDownloadLink
+                      fileId={activeItem.fileId}
+                      fileName={activeItem.fileName || activeItem.title}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                    />
                   )}
                   {canEdit && (
                     <button
@@ -1244,10 +1243,9 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
 
             <div className="p-5 overflow-y-auto space-y-5">
               {activeCollection.coverImageUrl && (
-                <img
+                <VaultImage
                   src={activeCollection.coverImageUrl}
                   alt={activeCollection.title}
-                  referrerPolicy="no-referrer"
                   className="w-full h-52 object-cover rounded-lg border border-zinc-200 dark:border-zinc-800"
                 />
               )}

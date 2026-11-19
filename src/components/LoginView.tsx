@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { signInWithPopup } from 'firebase/auth';
-import { ArrowRight, Lock, Moon, ShieldCheck, Sun } from 'lucide-react';
-import { auth, googleProvider } from '../firebase';
+import React, { useEffect, useState } from 'react';
+import { getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import { AlertTriangle, ArrowRight, ExternalLink, Lock, Moon, ShieldCheck, Sun } from 'lucide-react';
+import { auth, FIREBASE_PROJECT_ID, googleProvider } from '../firebase';
 import { BrandMark } from './BrandMark';
 
 interface LoginViewProps {
@@ -17,15 +17,44 @@ export const LoginView: React.FC<LoginViewProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [unauthorizedHost, setUnauthorizedHost] = useState<string | null>(null);
+
+  useEffect(() => {
+    getRedirectResult(auth).catch((err) => {
+      const code = (err as { code?: string })?.code || '';
+      const msg = err instanceof Error ? err.message : '';
+      if (code === 'auth/unauthorized-domain' || msg.includes('auth/unauthorized-domain')) {
+        setUnauthorizedHost(window.location.hostname);
+      } else if (msg && !msg.includes('popup-closed-by-user')) {
+        setErrorMsg(msg);
+      }
+    });
+  }, []);
 
   const handleGoogleLogin = async () => {
     setErrorMsg(null);
+    setUnauthorizedHost(null);
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
+      const code = (err as { code?: string })?.code || '';
       const msg = err instanceof Error ? err.message : 'Unable to sign in.';
-      if (!msg.includes('popup-closed-by-user')) {
+      if (code === 'auth/popup-blocked' || msg.includes('auth/popup-blocked')) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectErr) {
+          setErrorMsg(
+            redirectErr instanceof Error ? redirectErr.message : 'Unable to complete redirect sign-in.'
+          );
+        }
+      } else if (
+        code === 'auth/unauthorized-domain' ||
+        msg.includes('auth/unauthorized-domain')
+      ) {
+        setUnauthorizedHost(window.location.hostname);
+      } else if (!msg.includes('popup-closed-by-user')) {
         setErrorMsg(msg);
       }
     } finally {
@@ -84,6 +113,31 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed mb-8">
             Sign in with your verified account to manage case dossiers, upload encrypted evidence, and publish public archive sites.
           </p>
+
+          {unauthorizedHost && (
+            <div className="mb-5 p-3.5 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-950 dark:text-amber-200 space-y-2">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Authorize Deployment Domain</span>
+              </div>
+              <p className="leading-relaxed">
+                Firebase Authentication requires adding{' '}
+                <code className="font-mono-tabular font-semibold px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-900/60">
+                  {unauthorizedHost}
+                </code>{' '}
+                under Authentication → Settings → Authorized domains.
+              </p>
+              <a
+                href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-bold text-[#3061d0] dark:text-blue-400 hover:underline"
+              >
+                <span>Open Firebase Auth Settings</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
 
           {errorMsg && (
             <div className="mb-5 p-3 rounded-md border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-xs font-medium text-red-700 dark:text-red-300">

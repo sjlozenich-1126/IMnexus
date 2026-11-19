@@ -225,6 +225,41 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["slug", "caseId", "ownerId", "published", "title", "caseType", "status", "updatedAt"]
+    },
+    "VaultFile": {
+      "title": "VaultFile",
+      "description": "Metadata and AES-256-GCM key manifest for a cloud-stored encrypted vault file.",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array", "description": "Bounded up to 20 authorized UIDs." },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 260 },
+        "mimeType": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "fileSize": { "type": "number" },
+        "sha256": { "type": "string", "minLength": 16, "maxLength": 128 },
+        "chunkCount": { "type": "number" },
+        "keyB64": { "type": "string", "minLength": 16, "maxLength": 200 },
+        "isPublic": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fileId", "ownerId", "memberUids", "fileName", "mimeType", "fileSize", "sha256", "chunkCount", "keyB64", "isPublic", "createdAt", "updatedAt"]
+    },
+    "VaultChunk": {
+      "title": "VaultChunk",
+      "description": "AES-256-GCM encrypted base64 payload chunk of a cloud vault file.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fileId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "index": { "type": "number" },
+        "ivB64": { "type": "string", "minLength": 8, "maxLength": 64 },
+        "dataB64": { "type": "string", "minLength": 1, "maxLength": 900000 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fileId", "index", "ivB64", "dataB64", "ownerId", "createdAt"]
     }
   },
   "firestore": {
@@ -271,6 +306,14 @@
     "/publicSites/{slug}": {
       "schema": { "$ref": "#/entities/PublicSite" },
       "description": "Published public-facing dossier sites indexed by URL slug."
+    },
+    "/vaultFiles/{fileId}": {
+      "schema": { "$ref": "#/entities/VaultFile" },
+      "description": "Encrypted file manifests persisted in Cloud Firestore."
+    },
+    "/vaultFiles/{fileId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/VaultChunk" },
+      "description": "Encrypted binary chunks belonging to a vault file."
     }
   }
 }
