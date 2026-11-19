@@ -1,0 +1,552 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 3: Primitive Helpers
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'demopocrisyrepository@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidSlug(slug) {
+      return slug is string && slug.size() >= 2 && slug.size() <= 96 && slug.matches('^[a-z0-9\\-]+$');
+    }
+
+    function isBoundedStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.role in ['admin', 'editor', 'reviewer', 'viewer']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminMarker(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.grantedBy is string && data.grantedBy.size() >= 1 && data.grantedBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCaseRecord(data, caseId) {
+      return data.keys().hasAll([
+          'id', 'caseNumber', 'title', 'caseType', 'status',
+          'publicSlug', 'isPublished', 'ownerId', 'memberUids', 'editorUids', 'invitedEmails',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'caseNumber', 'title', 'caseType', 'court', 'judge', 'charge',
+          'arrestDates', 'closureDate', 'status', 'disposition', 'summary',
+          'customFields', 'tags', 'publicSlug', 'isPublished', 'publicHeadline',
+          'publicSubtitle', 'publicIntro', 'publicCoverUrl', 'ownerId',
+          'memberUids', 'editorUids', 'invitedEmails', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id == caseId
+        && data.caseNumber is string && data.caseNumber.size() >= 1 && data.caseNumber.size() <= 64
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.caseType in ['legal', 'investigation', 'project']
+        && (!('court' in data) || (data.court is string && data.court.size() <= 200))
+        && (!('judge' in data) || (data.judge is string && data.judge.size() <= 160))
+        && (!('charge' in data) || (data.charge is string && data.charge.size() <= 300))
+        && (!('arrestDates' in data) || (data.arrestDates is string && data.arrestDates.size() <= 160))
+        && (!('closureDate' in data) || (data.closureDate is string && data.closureDate.size() <= 120))
+        && data.status in ['Active', 'Dismissed', 'Draft', 'Closed', 'In Review']
+        && (!('disposition' in data) || (data.disposition is string && data.disposition.size() <= 300))
+        && (!('summary' in data) || (data.summary is string && data.summary.size() <= 8000))
+        && (!('customFields' in data) || (data.customFields is list && data.customFields.size() <= 25))
+        && (!('tags' in data) || isBoundedStringList(data.tags, 20))
+        && isValidSlug(data.publicSlug)
+        && data.isPublished is bool
+        && (!('publicHeadline' in data) || (data.publicHeadline is string && data.publicHeadline.size() <= 240))
+        && (!('publicSubtitle' in data) || (data.publicSubtitle is string && data.publicSubtitle.size() <= 320))
+        && (!('publicIntro' in data) || (data.publicIntro is string && data.publicIntro.size() <= 8000))
+        && (!('publicCoverUrl' in data) || (data.publicCoverUrl is string && data.publicCoverUrl.size() <= 500))
+        && isValidId(data.ownerId)
+        && isBoundedStringList(data.memberUids, 20)
+        && isBoundedStringList(data.editorUids, 20)
+        && isBoundedStringList(data.invitedEmails, 20)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCaseSection(data, caseId, sectionId) {
+      return data.keys().hasAll(['id', 'caseId', 'order', 'title', 'content', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'caseId', 'order', 'title', 'content', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && isValidId(data.id) && data.id == sectionId
+        && isValidId(data.caseId) && data.caseId == caseId
+        && data.order is number
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.content is string && data.content.size() <= 30000
+        && data.isPublic is bool
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTimelineEvent(data, caseId, eventId) {
+      return data.keys().hasAll(['id', 'caseId', 'date', 'title', 'description', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'caseId', 'date', 'time', 'title', 'description', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && isValidId(data.id) && data.id == eventId
+        && isValidId(data.caseId) && data.caseId == caseId
+        && data.date is string && data.date.size() >= 1 && data.date.size() <= 40
+        && (!('time' in data) || (data.time is string && data.time.size() <= 40))
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.description is string && data.description.size() <= 4000
+        && data.isPublic is bool
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCaseActor(data, caseId, actorId) {
+      return data.keys().hasAll(['id', 'caseId', 'name', 'role', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'caseId', 'name', 'role', 'organization', 'notes', 'isPublic', 'ownerId', 'createdAt', 'updatedAt'])
+        && isValidId(data.id) && data.id == actorId
+        && isValidId(data.caseId) && data.caseId == caseId
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.role is string && data.role.size() >= 1 && data.role.size() <= 160
+        && (!('organization' in data) || (data.organization is string && data.organization.size() <= 200))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000))
+        && data.isPublic is bool
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCaseCollaborator(data, caseId, collabId) {
+      return data.keys().hasAll(['id', 'caseId', 'email', 'role', 'ownerId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'caseId', 'email', 'role', 'ownerId', 'createdAt', 'updatedAt'])
+        && isValidId(data.id) && data.id == collabId
+        && isValidId(data.caseId) && data.caseId == caseId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.role in ['editor', 'reviewer', 'viewer']
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVaultItem(data, itemId) {
+      return data.keys().hasAll(['id', 'title', 'category', 'mediaType', 'encrypted', 'caseIds', 'tags', 'isPublic', 'ownerId', 'memberUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'title', 'description', 'category', 'mediaType', 'docType',
+          'fileId', 'fileName', 'mimeType', 'fileSize', 'sha256', 'encrypted',
+          'textContent', 'caseIds', 'tags', 'isPublic', 'ownerId', 'memberUids',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id == itemId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && (!('description' in data) || (data.description is string && data.description.size() <= 4000))
+        && data.category in ['document', 'evidence']
+        && data.mediaType in ['pdf', 'image', 'video', 'audio', 'text', 'file']
+        && (!('docType' in data) || (data.docType is string && data.docType.size() <= 120))
+        && (!('fileId' in data) || (data.fileId is string && data.fileId.size() <= 128))
+        && (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 260))
+        && (!('mimeType' in data) || (data.mimeType is string && data.mimeType.size() <= 160))
+        && (!('fileSize' in data) || data.fileSize is number)
+        && (!('sha256' in data) || (data.sha256 is string && data.sha256.size() <= 128))
+        && data.encrypted is bool
+        && (!('textContent' in data) || (data.textContent is string && data.textContent.size() <= 20000))
+        && isBoundedStringList(data.caseIds, 10)
+        && isBoundedStringList(data.tags, 15)
+        && data.isPublic is bool
+        && isValidId(data.ownerId)
+        && isBoundedStringList(data.memberUids, 20)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCollection(data, collectionId) {
+      return data.keys().hasAll(['id', 'title', 'explanation', 'itemIds', 'tags', 'isPublic', 'ownerId', 'memberUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'title', 'explanation', 'coverImageUrl', 'itemIds', 'caseId',
+          'tags', 'isPublic', 'ownerId', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id) && data.id == collectionId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.explanation is string && data.explanation.size() <= 8000
+        && (!('coverImageUrl' in data) || (data.coverImageUrl is string && data.coverImageUrl.size() <= 500))
+        && isBoundedStringList(data.itemIds, 50)
+        && (!('caseId' in data) || (data.caseId is string && data.caseId.size() <= 128))
+        && isBoundedStringList(data.tags, 15)
+        && data.isPublic is bool
+        && isValidId(data.ownerId)
+        && isBoundedStringList(data.memberUids, 20)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data, logId) {
+      return data.keys().hasAll(['id', 'title', 'detail', 'actorName', 'ownerId', 'createdAt'])
+        && data.keys().hasOnly(['id', 'title', 'detail', 'caseId', 'actorName', 'ownerId', 'createdAt'])
+        && isValidId(data.id) && data.id == logId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.detail is string && data.detail.size() <= 400
+        && (!('caseId' in data) || (data.caseId is string && data.caseId.size() <= 128))
+        && data.actorName is string && data.actorName.size() <= 120
+        && isValidId(data.ownerId)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPublicSite(data, slug) {
+      return data.keys().hasAll(['slug', 'caseId', 'ownerId', 'published', 'title', 'caseType', 'status', 'updatedAt'])
+        && data.keys().hasOnly([
+          'slug', 'caseId', 'ownerId', 'published', 'caseNumber', 'title', 'caseType',
+          'court', 'judge', 'charge', 'arrestDates', 'closureDate', 'status',
+          'disposition', 'headline', 'subtitle', 'intro', 'coverUrl', 'customFields',
+          'sections', 'timeline', 'actors', 'documents', 'evidence', 'collections',
+          'updatedAt'
+        ])
+        && isValidSlug(data.slug) && data.slug == slug
+        && isValidId(data.caseId)
+        && isValidId(data.ownerId)
+        && data.published is bool
+        && (!('caseNumber' in data) || (data.caseNumber is string && data.caseNumber.size() <= 64))
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.caseType in ['legal', 'investigation', 'project']
+        && (!('court' in data) || (data.court is string && data.court.size() <= 200))
+        && (!('judge' in data) || (data.judge is string && data.judge.size() <= 160))
+        && (!('charge' in data) || (data.charge is string && data.charge.size() <= 300))
+        && (!('arrestDates' in data) || (data.arrestDates is string && data.arrestDates.size() <= 160))
+        && (!('closureDate' in data) || (data.closureDate is string && data.closureDate.size() <= 120))
+        && data.status is string && data.status.size() <= 60
+        && (!('disposition' in data) || (data.disposition is string && data.disposition.size() <= 300))
+        && (!('headline' in data) || (data.headline is string && data.headline.size() <= 240))
+        && (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 320))
+        && (!('intro' in data) || (data.intro is string && data.intro.size() <= 8000))
+        && (!('coverUrl' in data) || (data.coverUrl is string && data.coverUrl.size() <= 500))
+        && (!('customFields' in data) || (data.customFields is list && data.customFields.size() <= 25))
+        && (!('sections' in data) || (data.sections is list && data.sections.size() <= 40))
+        && (!('timeline' in data) || (data.timeline is list && data.timeline.size() <= 120))
+        && (!('actors' in data) || (data.actors is list && data.actors.size() <= 60))
+        && (!('documents' in data) || (data.documents is list && data.documents.size() <= 100))
+        && (!('evidence' in data) || (data.evidence is list && data.evidence.size() <= 100))
+        && (!('collections' in data) || (data.collections is list && data.collections.size() <= 40))
+        && data.updatedAt is timestamp;
+    }
+
+    // Relational helpers for parent case
+    function isCaseMember(caseData) {
+      return isSignedIn() && (
+        caseData.ownerId == request.auth.uid ||
+        request.auth.uid in caseData.memberUids ||
+        (request.auth.token.email_verified == true && request.auth.token.email in caseData.invitedEmails)
+      );
+    }
+
+    function canAccessParentCase(caseId) {
+      let parentCase = get(/databases/$(database)/documents/cases/$(caseId)).data;
+      return isAdmin() || isCaseMember(parentCase);
+    }
+
+    function canModifyParentCase(caseId) {
+      let parentCase = get(/databases/$(database)/documents/cases/$(caseId)).data;
+      return isAdmin() || parentCase.ownerId == request.auth.uid || request.auth.uid in parentCase.editorUids;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().role == 'editor' || (isBootstrappedAdmin() && incoming().role == 'admin'));
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']))
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isAdmin()
+        && isValidAdminMarker(incoming(), userId)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(userId) && isBootstrappedAdmin();
+    }
+
+    match /cases/{caseId} {
+      allow get: if isValidId(caseId) && (isAdmin() || isCaseMember(existing()));
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        existing().ownerId == request.auth.uid ||
+        request.auth.uid in existing().memberUids ||
+        (request.auth.token.email_verified == true && request.auth.token.email in existing().invitedEmails)
+      );
+      allow create: if isValidId(caseId)
+        && isVerifiedUser()
+        && isValidCaseRecord(incoming(), caseId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(caseId)
+        && isVerifiedUser()
+        && isValidCaseRecord(incoming(), caseId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly([
+            'caseNumber', 'title', 'caseType', 'court', 'judge', 'charge',
+            'arrestDates', 'closureDate', 'status', 'disposition', 'summary',
+            'customFields', 'tags', 'publicSlug', 'isPublished', 'publicHeadline',
+            'publicSubtitle', 'publicIntro', 'publicCoverUrl', 'memberUids',
+            'editorUids', 'invitedEmails', 'updatedAt'
+          ])) ||
+          (request.auth.uid in existing().editorUids && incoming().diff(existing()).affectedKeys().hasOnly([
+            'caseNumber', 'title', 'court', 'judge', 'charge', 'arrestDates',
+            'closureDate', 'status', 'disposition', 'summary', 'customFields',
+            'tags', 'publicHeadline', 'publicSubtitle', 'publicIntro', 'publicCoverUrl',
+            'updatedAt'
+          ])) ||
+          (request.auth.token.email in existing().invitedEmails && incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+        );
+      allow delete: if isValidId(caseId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+
+      match /sections/{sectionId} {
+        allow get: if isValidId(caseId) && isValidId(sectionId) && canAccessParentCase(caseId);
+        allow list: if isSignedIn() && canAccessParentCase(caseId);
+        allow create: if isValidId(caseId) && isValidId(sectionId)
+          && isVerifiedUser()
+          && isValidCaseSection(incoming(), caseId, sectionId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId);
+        allow update: if isValidId(caseId) && isValidId(sectionId)
+          && isVerifiedUser()
+          && isValidCaseSection(incoming(), caseId, sectionId)
+          && incoming().id == existing().id
+          && incoming().caseId == existing().caseId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['order', 'title', 'content', 'isPublic', 'updatedAt']);
+        allow delete: if isValidId(caseId) && isValidId(sectionId) && isVerifiedUser() && canModifyParentCase(caseId);
+      }
+
+      match /timeline/{eventId} {
+        allow get: if isValidId(caseId) && isValidId(eventId) && canAccessParentCase(caseId);
+        allow list: if isSignedIn() && canAccessParentCase(caseId);
+        allow create: if isValidId(caseId) && isValidId(eventId)
+          && isVerifiedUser()
+          && isValidTimelineEvent(incoming(), caseId, eventId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId);
+        allow update: if isValidId(caseId) && isValidId(eventId)
+          && isVerifiedUser()
+          && isValidTimelineEvent(incoming(), caseId, eventId)
+          && incoming().id == existing().id
+          && incoming().caseId == existing().caseId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['date', 'time', 'title', 'description', 'isPublic', 'updatedAt']);
+        allow delete: if isValidId(caseId) && isValidId(eventId) && isVerifiedUser() && canModifyParentCase(caseId);
+      }
+
+      match /actors/{actorId} {
+        allow get: if isValidId(caseId) && isValidId(actorId) && canAccessParentCase(caseId);
+        allow list: if isSignedIn() && canAccessParentCase(caseId);
+        allow create: if isValidId(caseId) && isValidId(actorId)
+          && isVerifiedUser()
+          && isValidCaseActor(incoming(), caseId, actorId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId);
+        allow update: if isValidId(caseId) && isValidId(actorId)
+          && isVerifiedUser()
+          && isValidCaseActor(incoming(), caseId, actorId)
+          && incoming().id == existing().id
+          && incoming().caseId == existing().caseId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'organization', 'notes', 'isPublic', 'updatedAt']);
+        allow delete: if isValidId(caseId) && isValidId(actorId) && isVerifiedUser() && canModifyParentCase(caseId);
+      }
+
+      match /collaborators/{collabId} {
+        allow get: if isValidId(caseId) && isValidId(collabId) && canAccessParentCase(caseId);
+        allow list: if isSignedIn() && canAccessParentCase(caseId);
+        allow create: if isValidId(caseId) && isValidId(collabId)
+          && isVerifiedUser()
+          && isValidCaseCollaborator(incoming(), caseId, collabId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId);
+        allow update: if isValidId(caseId) && isValidId(collabId)
+          && isVerifiedUser()
+          && isValidCaseCollaborator(incoming(), caseId, collabId)
+          && incoming().id == existing().id
+          && incoming().caseId == existing().caseId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && canModifyParentCase(caseId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']);
+        allow delete: if isValidId(caseId) && isValidId(collabId) && isVerifiedUser() && canModifyParentCase(caseId);
+      }
+    }
+
+    match /vaultItems/{itemId} {
+      allow get: if isValidId(itemId) && isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+      allow list: if isSignedIn() && (isBootstrappedAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+      allow create: if isValidId(itemId)
+        && isVerifiedUser()
+        && isValidVaultItem(incoming(), itemId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(itemId)
+        && isVerifiedUser()
+        && isValidVaultItem(incoming(), itemId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'category', 'docType', 'textContent',
+          'caseIds', 'tags', 'isPublic', 'memberUids', 'updatedAt'
+        ]);
+      allow delete: if isValidId(itemId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+
+    match /collections/{collectionId} {
+      allow get: if isValidId(collectionId) && isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+      allow list: if isSignedIn() && (isBootstrappedAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+      allow create: if isValidId(collectionId)
+        && isVerifiedUser()
+        && isValidCollection(incoming(), collectionId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(collectionId)
+        && isVerifiedUser()
+        && isValidCollection(incoming(), collectionId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'explanation', 'coverImageUrl', 'itemIds', 'caseId',
+          'tags', 'isPublic', 'memberUids', 'updatedAt'
+        ]);
+      allow delete: if isValidId(collectionId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+
+    match /activityLogs/{logId} {
+      allow get: if isValidId(logId) && isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (isBootstrappedAdmin() || existing().ownerId == request.auth.uid);
+      allow create: if isValidId(logId)
+        && isVerifiedUser()
+        && isValidActivityLog(incoming(), logId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(logId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+
+    match /publicSites/{slug} {
+      allow get: if isValidSlug(slug) && (existing().published == true || (isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid)));
+      allow list: if existing().published == true || (isSignedIn() && (isBootstrappedAdmin() || existing().ownerId == request.auth.uid));
+      allow create: if isValidSlug(slug)
+        && isVerifiedUser()
+        && isValidPublicSite(incoming(), slug)
+        && incoming().ownerId == request.auth.uid
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/cases/$(incoming().caseId));
+      allow update: if isValidSlug(slug)
+        && isVerifiedUser()
+        && isValidPublicSite(incoming(), slug)
+        && incoming().slug == existing().slug
+        && incoming().caseId == existing().caseId
+        && incoming().ownerId == existing().ownerId
+        && incoming().updatedAt == request.time
+        && (isAdmin() || existing().ownerId == request.auth.uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'published', 'caseNumber', 'title', 'caseType', 'court', 'judge',
+          'charge', 'arrestDates', 'closureDate', 'status', 'disposition',
+          'headline', 'subtitle', 'intro', 'coverUrl', 'customFields',
+          'sections', 'timeline', 'actors', 'documents', 'evidence',
+          'collections', 'updatedAt'
+        ]);
+      allow delete: if isValidSlug(slug) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+  }
+}

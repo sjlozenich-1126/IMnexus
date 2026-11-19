@@ -1,0 +1,276 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user account and workspace role profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["admin", "editor", "reviewer", "viewer"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Trusted administrator marker document.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 254 },
+        "grantedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "grantedBy", "createdAt"]
+    },
+    "CaseRecord": {
+      "title": "CaseRecord",
+      "description": "Case or project dossier with metadata, customization, and publication state.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "caseNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "caseType": { "type": "string", "enum": ["legal", "investigation", "project"] },
+        "court": { "type": "string", "maxLength": 200 },
+        "judge": { "type": "string", "maxLength": 160 },
+        "charge": { "type": "string", "maxLength": 300 },
+        "arrestDates": { "type": "string", "maxLength": 160 },
+        "closureDate": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["Active", "Dismissed", "Draft", "Closed", "In Review"] },
+        "disposition": { "type": "string", "maxLength": 300 },
+        "summary": { "type": "string", "maxLength": 8000 },
+        "customFields": { "type": "array", "description": "Bounded up to 25 custom key-value pairs." },
+        "tags": { "type": "array", "description": "Bounded up to 20 tags." },
+        "publicSlug": { "type": "string", "minLength": 2, "maxLength": 96, "pattern": "^[a-z0-9\\-]+$" },
+        "isPublished": { "type": "boolean" },
+        "publicHeadline": { "type": "string", "maxLength": 240 },
+        "publicSubtitle": { "type": "string", "maxLength": 320 },
+        "publicIntro": { "type": "string", "maxLength": 8000 },
+        "publicCoverUrl": { "type": "string", "maxLength": 500 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array", "description": "Bounded up to 20 member UIDs with read access." },
+        "editorUids": { "type": "array", "description": "Bounded up to 20 member UIDs with write/edit access." },
+        "invitedEmails": { "type": "array", "description": "Bounded up to 20 stakeholder emails." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "caseNumber", "title", "caseType", "status", "publicSlug", "isPublished", "ownerId", "memberUids", "editorUids", "invitedEmails", "createdAt", "updatedAt"]
+    },
+    "CaseSection": {
+      "title": "CaseSection",
+      "description": "Modular narrative or analytical report section inside a case.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "caseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "order": { "type": "number" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "content": { "type": "string", "maxLength": 30000 },
+        "isPublic": { "type": "boolean" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "caseId", "order", "title", "content", "isPublic", "ownerId", "createdAt", "updatedAt"]
+    },
+    "TimelineEvent": {
+      "title": "TimelineEvent",
+      "description": "Chronological event entry inside a case.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "caseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "date": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "time": { "type": "string", "maxLength": 40 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "isPublic": { "type": "boolean" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "caseId", "date", "title", "description", "isPublic", "ownerId", "createdAt", "updatedAt"]
+    },
+    "CaseActor": {
+      "title": "CaseActor",
+      "description": "Key actor, entity, witness, or counsel associated with a case.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "caseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "organization": { "type": "string", "maxLength": 200 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "isPublic": { "type": "boolean" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "caseId", "name", "role", "isPublic", "ownerId", "createdAt", "updatedAt"]
+    },
+    "CaseCollaborator": {
+      "title": "CaseCollaborator",
+      "description": "Stakeholder permission assignment for a specific case.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "caseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 254 },
+        "role": { "type": "string", "enum": ["editor", "reviewer", "viewer"] },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "caseId", "email", "role", "ownerId", "createdAt", "updatedAt"]
+    },
+    "VaultItem": {
+      "title": "VaultItem",
+      "description": "Encrypted document or evidence record in the Vault / Library.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "category": { "type": "string", "enum": ["document", "evidence"] },
+        "mediaType": { "type": "string", "enum": ["pdf", "image", "video", "audio", "text", "file"] },
+        "docType": { "type": "string", "maxLength": 120 },
+        "fileId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 260 },
+        "mimeType": { "type": "string", "maxLength": 160 },
+        "fileSize": { "type": "number" },
+        "sha256": { "type": "string", "maxLength": 128 },
+        "encrypted": { "type": "boolean" },
+        "textContent": { "type": "string", "maxLength": 20000 },
+        "caseIds": { "type": "array", "description": "Bounded up to 10 linked case IDs." },
+        "tags": { "type": "array", "description": "Bounded up to 15 tags." },
+        "isPublic": { "type": "boolean" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array", "description": "Bounded up to 20 member UIDs." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "mediaType", "encrypted", "caseIds", "tags", "isPublic", "ownerId", "memberUids", "createdAt", "updatedAt"]
+    },
+    "EvidenceCollection": {
+      "title": "EvidenceCollection",
+      "description": "Curated collection of selected evidence/document items with title, cover image, and contextual explanation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "explanation": { "type": "string", "maxLength": 8000 },
+        "coverImageUrl": { "type": "string", "maxLength": 500 },
+        "itemIds": { "type": "array", "description": "Bounded up to 50 vault item IDs." },
+        "caseId": { "type": "string", "maxLength": 128 },
+        "tags": { "type": "array", "description": "Bounded up to 15 tags." },
+        "isPublic": { "type": "boolean" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array", "description": "Bounded up to 20 member UIDs." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "explanation", "itemIds", "tags", "isPublic", "ownerId", "memberUids", "createdAt", "updatedAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit log entry for console operations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "detail": { "type": "string", "maxLength": 400 },
+        "caseId": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "detail", "actorName", "ownerId", "createdAt"]
+    },
+    "PublicSite": {
+      "title": "PublicSite",
+      "description": "Sanitized public-facing dossier site manifest accessible via shareable URL.",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "minLength": 2, "maxLength": 96, "pattern": "^[a-z0-9\\-]+$" },
+        "caseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "published": { "type": "boolean" },
+        "caseNumber": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "caseType": { "type": "string", "enum": ["legal", "investigation", "project"] },
+        "court": { "type": "string", "maxLength": 200 },
+        "judge": { "type": "string", "maxLength": 160 },
+        "charge": { "type": "string", "maxLength": 300 },
+        "arrestDates": { "type": "string", "maxLength": 160 },
+        "closureDate": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "maxLength": 60 },
+        "disposition": { "type": "string", "maxLength": 300 },
+        "headline": { "type": "string", "maxLength": 240 },
+        "subtitle": { "type": "string", "maxLength": 320 },
+        "intro": { "type": "string", "maxLength": 8000 },
+        "coverUrl": { "type": "string", "maxLength": 500 },
+        "customFields": { "type": "array" },
+        "sections": { "type": "array" },
+        "timeline": { "type": "array" },
+        "actors": { "type": "array" },
+        "documents": { "type": "array" },
+        "evidence": { "type": "array" },
+        "collections": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slug", "caseId", "ownerId", "published", "title", "caseType", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profiles with role assignments."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Trusted administrator directory."
+    },
+    "/cases/{caseId}": {
+      "schema": { "$ref": "#/entities/CaseRecord" },
+      "description": "Case and project dossiers owned by users or shared with stakeholders."
+    },
+    "/cases/{caseId}/sections/{sectionId}": {
+      "schema": { "$ref": "#/entities/CaseSection" },
+      "description": "Report narrative sections belonging to a parent case."
+    },
+    "/cases/{caseId}/timeline/{eventId}": {
+      "schema": { "$ref": "#/entities/TimelineEvent" },
+      "description": "Chronological timeline events belonging to a parent case."
+    },
+    "/cases/{caseId}/actors/{actorId}": {
+      "schema": { "$ref": "#/entities/CaseActor" },
+      "description": "Key actors and entities belonging to a parent case."
+    },
+    "/cases/{caseId}/collaborators/{collabId}": {
+      "schema": { "$ref": "#/entities/CaseCollaborator" },
+      "description": "Stakeholder access permissions for a parent case."
+    },
+    "/vaultItems/{itemId}": {
+      "schema": { "$ref": "#/entities/VaultItem" },
+      "description": "Document Vault and Evidence Library items."
+    },
+    "/collections/{collectionId}": {
+      "schema": { "$ref": "#/entities/EvidenceCollection" },
+      "description": "Curated evidence and document collections."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Console audit activity logs."
+    },
+    "/publicSites/{slug}": {
+      "schema": { "$ref": "#/entities/PublicSite" },
+      "description": "Published public-facing dossier sites indexed by URL slug."
+    }
+  }
+}

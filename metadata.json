@@ -1,0 +1,6 @@
+{
+  "name": "IMnexus",
+  "description": "Case management, encrypted evidence archive, collection builder, and public dossier publishing platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
