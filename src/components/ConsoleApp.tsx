@@ -876,12 +876,12 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                   IMnexus Portfolio Connection Map
                 </h1>
                 <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5">
-                  Interactive diagram mapping structural and semantic patterns across your cases, jurisdictions, curated collections, shared #tags, and vault items.
+                  Explore cross-case patterns across metadata attributes (jurisdiction, lead, subject, disposition, custom fields), shared #tags, curated collections, and multi-axis matrices.
                 </p>
               </div>
               <NexusMapView
                 graph={portfolioNexusGraph}
-                subtitle="Click any node or insight card to inspect linked records, or jump directly into a case workspace."
+                subtitle="Switch between Relationship Web, configurable X×Y Axis Matrix, and Chronology Axis views."
                 onSelectCaseId={openCase}
                 onInspectNodeArtifact={(node) => {
                   if (node.kind === 'document') setView('documents');

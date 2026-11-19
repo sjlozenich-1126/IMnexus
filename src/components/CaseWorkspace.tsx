@@ -232,14 +232,28 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const caseNexusGraph = useMemo(
     () =>
       buildSingleCaseFromWorkspace({
-        caseRecord,
+        caseRecord: {
+          ...caseRecord,
+          title: form.title || caseRecord.title,
+          caseNumber: form.caseNumber || caseRecord.caseNumber,
+          court: form.court,
+          judge: form.judge,
+          charge: form.charge,
+          status: form.status as CaseStatus,
+          disposition: form.disposition,
+          customFields: customFields.filter((cf) => cf.label.trim() && cf.value.trim()),
+          tags: form.tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        },
         sections,
         timeline,
         actors,
         vaultItems,
         collections,
       }),
-    [caseRecord, sections, timeline, actors, vaultItems, collections]
+    [caseRecord, form, customFields, sections, timeline, actors, vaultItems, collections]
   );
 
   const showFlash = (msg: string) => {
@@ -1396,7 +1410,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               <NexusMapView
                 graph={caseNexusGraph}
                 compact
-                subtitle="Interactive mapping of actors, dated events, curated collections, shared #tags, and corroborating artifacts inside this case."
+                subtitle="Visualizing case metadata (#tags, jurisdiction, lead, subject, custom fields), actors, chronology, and bridged collections across Relationship Web, Axis Matrix, and Time Axis."
                 onInspectNodeArtifact={(node) =>
                   setActiveTab(node.kind === 'document' ? 'documents' : 'evidence')
                 }

@@ -412,7 +412,7 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
             </h2>
             <NexusMapView
               graph={siteNexusGraph}
-              subtitle="Interactive entity, chronology, collection, and evidentiary correlation diagram synthesized from this public dossier."
+              subtitle="Explore relationships across case metadata, tags, actors, collections, and chronology via Relationship Web, configurable Axis Matrix, and Chronology Axis."
               onInspectNodeArtifact={(node) =>
                 setPreviewItem({
                   title: node.label,
