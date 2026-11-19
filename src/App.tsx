@@ -39,6 +39,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -63,12 +64,17 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      setProfileError(null);
       if (user) {
         try {
           const profile = await ensureUserProfile(user);
           setUserProfile(profile);
         } catch (err) {
           console.error('Failed to sync user profile:', err);
+          setUserProfile(null);
+          setProfileError(
+            err instanceof Error ? err.message : 'Unable to sync account with Cloud Firestore.'
+          );
         }
       } else {
         setUserProfile(null);
@@ -112,14 +118,15 @@ export default function App() {
           isAuthenticated={Boolean(firebaseUser)}
         />
       ) : !authReady ? (
-        <div className="min-h-screen flex items-center justify-center bg-[#f4f4f5] dark:bg-[#09090b] text-zinc-500 text-sm">
-          Initializing IMnexus...
+        <div className="min-h-screen flex items-center justify-center bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#6a716b] dark:text-[#8d948e] text-xs tracking-wide">
+          Initializing IMnexus…
         </div>
       ) : !firebaseUser || !userProfile ? (
         <LoginView
           darkMode={darkMode}
           onToggleDarkMode={toggleDarkMode}
           onNavigateArchive={() => navigateTo({ kind: 'archive' })}
+          externalError={profileError}
         />
       ) : (
         <ConsoleApp

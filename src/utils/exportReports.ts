@@ -9,6 +9,7 @@ import type {
   TimelineEvent,
   VaultItem,
 } from '../types';
+import { buildCaseNexus, buildPublicSiteNexus } from './nexusEngine';
 
 export interface CustomReportOptions {
   reportTitle: string;
@@ -39,8 +40,156 @@ export const DEFAULT_COMPLETE_REPORT_OPTIONS: CustomReportOptions = {
   publicOnly: false,
 };
 
+// IMnexus Architectural Color Palette (matching HTML design system)
+const RGB = {
+  INK: [15, 18, 16] as [number, number, number], // #0f1210
+  FOREST: [26, 46, 36] as [number, number, number], // #1a2e24
+  GREEN_TEXT: [45, 90, 61] as [number, number, number], // #2d5a3d
+  MUTED: [106, 113, 107] as [number, number, number], // #6a716b
+  CREAM: [243, 240, 233] as [number, number, number], // #f3f0e9
+  CREAM_SOFT: [250, 248, 244] as [number, number, number], // #faf8f4
+  LINE: [221, 216, 206] as [number, number, number], // #ddd8ce
+  WHITE: [255, 255, 255] as [number, number, number],
+};
+
+const MARGIN_X = 44;
+const TOP_Y = 52;
+const BOTTOM_LIMIT = 738; // Letter height 792pt minus bottom margin/footer room
+
 function sanitizeFileName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'imnexus-report';
+}
+
+function createPdfContext() {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - MARGIN_X * 2;
+  let y = TOP_Y;
+
+  const drawPageTopRule = () => {
+    doc.setFillColor(...RGB.FOREST);
+    doc.rect(0, 0, pageWidth, 5, 'F');
+  };
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > BOTTOM_LIMIT) {
+      doc.addPage();
+      drawPageTopRule();
+      y = TOP_Y;
+    }
+  };
+
+  const drawSectionHeading = (kicker: string | null, heading: string) => {
+    ensureSpace(58);
+    if (kicker) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...RGB.GREEN_TEXT);
+      doc.text(kicker.toUpperCase(), MARGIN_X, y);
+      y += 12;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12.5);
+    doc.setTextColor(...RGB.INK);
+    doc.text(heading, MARGIN_X, y);
+    y += 6;
+    doc.setDrawColor(...RGB.LINE);
+    doc.setLineWidth(0.75);
+    doc.line(MARGIN_X, y, pageWidth - MARGIN_X, y);
+    y += 14;
+  };
+
+  const drawParagraphs = (rawText: string, fontSize = 9.5, lineHeight = 13.5) => {
+    const paragraphs = (rawText || '')
+      .replace(/\r\n/g, '\n')
+      .split(/\n{2,}|\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    if (paragraphs.length === 0) return;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(36, 40, 37);
+
+    for (let pIdx = 0; pIdx < paragraphs.length; pIdx += 1) {
+      const wrapped = doc.splitTextToSize(paragraphs[pIdx], contentWidth) as string[];
+      for (const line of wrapped) {
+        ensureSpace(lineHeight + 2);
+        doc.text(line, MARGIN_X, y);
+        y += lineHeight;
+      }
+      if (pIdx < paragraphs.length - 1) {
+        y += 5;
+      }
+    }
+  };
+
+  const addRunningFooters = (leftLabel: string) => {
+    const pageCount = doc.getNumberOfPages();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    for (let p = 1; p <= pageCount; p += 1) {
+      doc.setPage(p);
+      doc.setDrawColor(...RGB.LINE);
+      doc.setLineWidth(0.5);
+      doc.line(MARGIN_X, pageHeight - 36, pageWidth - MARGIN_X, pageHeight - 36);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...RGB.MUTED);
+      doc.text(leftLabel, MARGIN_X, pageHeight - 22);
+      doc.text(`Page ${p} of ${pageCount}`, pageWidth - MARGIN_X, pageHeight - 22, {
+        align: 'right',
+      });
+    }
+  };
+
+  const getY = () => y;
+  const setY = (nextY: number) => {
+    y = nextY;
+  };
+
+  drawPageTopRule();
+
+  return {
+    doc,
+    pageWidth,
+    contentWidth,
+    getY,
+    setY,
+    ensureSpace,
+    drawSectionHeading,
+    drawParagraphs,
+    addRunningFooters,
+    drawPageTopRule,
+  };
+}
+
+function sharedTableDefaults(contentWidth: number) {
+  return {
+    tableWidth: contentWidth,
+    margin: { left: MARGIN_X, right: MARGIN_X, top: TOP_Y, bottom: 48 },
+    rowPageBreak: 'avoid' as const,
+    styles: {
+      font: 'helvetica',
+      fontSize: 8.5,
+      cellPadding: { top: 5.5, right: 7, bottom: 5.5, left: 7 },
+      textColor: RGB.INK,
+      lineColor: RGB.LINE,
+      lineWidth: 0.5,
+      overflow: 'linebreak' as const,
+      valign: 'top' as const,
+    },
+    headStyles: {
+      fillColor: RGB.FOREST,
+      textColor: RGB.CREAM_SOFT,
+      fontStyle: 'bold' as const,
+      fontSize: 8,
+    },
+    alternateRowStyles: {
+      fillColor: RGB.CREAM_SOFT,
+    },
+  };
 }
 
 export function exportCasePdf(params: {
@@ -62,69 +211,58 @@ export function exportCasePdf(params: {
     options = DEFAULT_COMPLETE_REPORT_OPTIONS,
   } = params;
 
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 50;
+  const ctx = createPdfContext();
+  const { doc, pageWidth, contentWidth, ensureSpace, drawSectionHeading, drawParagraphs } = ctx;
 
-  const ensureSpace = (needed: number) => {
-    if (y + needed > 730) {
-      doc.addPage();
-      y = 50;
-    }
-  };
-
-  // Header Bar
-  doc.setFillColor(48, 97, 208);
-  doc.rect(0, 0, pageWidth, 10, 'F');
-
+  // Top Header Strip
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.setTextColor(48, 97, 208);
-  doc.text('IMnexus', 40, y);
+  doc.setTextColor(...RGB.INK);
+  doc.text('IMnexus', MARGIN_X, ctx.getY());
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...RGB.MUTED);
+  doc.text(
+    `${options.reportTitle}  ·  Generated ${new Date().toLocaleDateString()}`,
+    pageWidth - MARGIN_X,
+    ctx.getY(),
+    { align: 'right' }
+  );
+  ctx.setY(ctx.getY() + 20);
+
+  // Shaded Dossier Title Callout Box
+  const titleLines = doc.splitTextToSize(caseRecord.title, contentWidth - 28) as string[];
+  const subtitleText = `Case No. ${caseRecord.caseNumber}  ·  ${
+    caseRecord.court || caseRecord.caseType.toUpperCase()
+  }  ·  Status: ${caseRecord.status}  ·  ${
+    options.publicOnly ? 'Public Release Edition' : 'Console Dossier'
+  }`;
+  const subLines = doc.splitTextToSize(subtitleText, contentWidth - 28) as string[];
+  const boxHeight = titleLines.length * 21 + subLines.length * 13 + 26;
+
+  doc.setFillColor(...RGB.CREAM);
+  doc.setDrawColor(...RGB.LINE);
+  doc.setLineWidth(0.75);
+  doc.rect(MARGIN_X, ctx.getY(), contentWidth, boxHeight, 'FD');
+
+  let boxY = ctx.getY() + 22;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  doc.setTextColor(...RGB.INK);
+  doc.text(titleLines, MARGIN_X + 14, boxY);
+  boxY += titleLines.length * 21 + 2;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(113, 113, 122);
-  doc.text(
-    `${options.reportTitle}  ·  Generated ${new Date().toLocaleDateString()}`,
-    pageWidth - 40,
-    y,
-    { align: 'right' }
-  );
-  y += 24;
+  doc.setTextColor(...RGB.MUTED);
+  doc.text(subLines, MARGIN_X + 14, boxY);
 
-  // Title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(9, 9, 11);
-  const titleLines = doc.splitTextToSize(caseRecord.title, pageWidth - 80) as string[];
-  doc.text(titleLines, 40, y);
-  y += titleLines.length * 24 + 4;
+  ctx.setY(ctx.getY() + boxHeight + 22);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(82, 82, 91);
-  doc.text(
-    `Case No. ${caseRecord.caseNumber}  ·  Status: ${caseRecord.status}  ·  ${
-      options.publicOnly ? 'Public Release Edition' : 'Full Console Edition'
-    }`,
-    40,
-    y
-  );
-  y += 20;
-
-  doc.setDrawColor(228, 228, 231);
-  doc.line(40, y, pageWidth - 40, y);
-  y += 18;
-
-  // Metadata Table
+  // 1. Metadata Table
   if (options.includeMetadata) {
-    ensureSpace(120);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Case Metadata', 40, y);
-    y += 8;
+    drawSectionHeading('Record Identification', 'Case Metadata');
 
     const metaRows: string[][] = [
       ['Case Number', caseRecord.caseNumber],
@@ -132,10 +270,10 @@ export function exportCasePdf(params: {
       ['Jurisdiction / Court', caseRecord.court || '—'],
       ['Presiding Judge / Lead', caseRecord.judge || '—'],
       ['Alleged Cause / Subject', caseRecord.charge || '—'],
-      ['Key Dates', caseRecord.arrestDates || '—'],
-      ['Closure Date', caseRecord.closureDate || '—'],
+      ['Key / Arrest Dates', caseRecord.arrestDates || '—'],
+      ['Official Closure Date', caseRecord.closureDate || '—'],
       ['Final Disposition', caseRecord.disposition || '—'],
-      ['Public Site URL', caseRecord.isPublished ? `/site/${caseRecord.publicSlug}` : 'Not Published'],
+      ['Public Archive URL', caseRecord.isPublished ? `/site/${caseRecord.publicSlug}` : 'Private / Unpublished'],
     ];
 
     if (options.includeCustomFields && caseRecord.customFields?.length) {
@@ -145,288 +283,451 @@ export function exportCasePdf(params: {
     }
 
     autoTable(doc, {
-      startY: y,
-      head: [['Field', 'Value']],
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Attribute', 'Recorded Value']],
       body: metaRows,
       theme: 'grid',
-      styles: { fontSize: 9, cellPadding: 5, textColor: [24, 24, 27] },
-      headStyles: { fillColor: [48, 97, 208], textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 160, fontStyle: 'bold' } },
-      margin: { left: 40, right: 40 },
+      columnStyles: {
+        0: { cellWidth: 165, fontStyle: 'bold', textColor: RGB.FOREST },
+        1: { cellWidth: contentWidth - 165 },
+      },
     });
-
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22;
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
-  // Executive Summary
-  if (options.includeSummary && caseRecord.summary) {
-    ensureSpace(80);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Executive Summary', 40, y);
-    y += 16;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(39, 39, 42);
-    const lines = doc.splitTextToSize(caseRecord.summary, pageWidth - 80) as string[];
-    for (const line of lines) {
-      ensureSpace(16);
-      doc.text(line, 40, y);
-      y += 14;
-    }
-    y += 14;
+  // 2. Executive Summary
+  if (options.includeSummary && caseRecord.summary?.trim()) {
+    drawSectionHeading('Executive Brief', 'Executive Summary');
+    drawParagraphs(caseRecord.summary, 9.5, 14);
+    ctx.setY(ctx.getY() + 14);
   }
 
-  // Timeline
+  // 3. Timeline
   const filteredTimeline = timeline
     .filter((t) => !options.publicOnly || t.isPublic)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (options.includeTimeline && filteredTimeline.length > 0) {
-    ensureSpace(100);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Chronological Timeline', 40, y);
-    y += 8;
-
+    drawSectionHeading('Chronology', 'Chronological Timeline of Events');
     autoTable(doc, {
-      startY: y,
-      head: [['Date', 'Time', 'Event', 'Details']],
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Date', 'Time', 'Event', 'Documented Details']],
       body: filteredTimeline.map((ev) => [
         ev.date,
         ev.time || '—',
         ev.title,
-        ev.description,
+        ev.description || '—',
       ]),
-      theme: 'striped',
-      styles: { fontSize: 8.5, cellPadding: 5, textColor: [24, 24, 27] },
-      headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255] },
-      columnStyles: { 0: { cellWidth: 75 }, 1: { cellWidth: 55 }, 2: { cellWidth: 130, fontStyle: 'bold' } },
-      margin: { left: 40, right: 40 },
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 74 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 145, fontStyle: 'bold' },
+        3: { cellWidth: contentWidth - 269 },
+      },
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22;
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
-  // Actors
+  // 4. Actors
   const filteredActors = actors.filter((a) => !options.publicOnly || a.isPublic);
   if (options.includeActors && filteredActors.length > 0) {
-    ensureSpace(100);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Key Actors & Institutional Entities', 40, y);
-    y += 8;
-
+    drawSectionHeading('Institutional Directory', 'Key Actors & Entities');
     autoTable(doc, {
-      startY: y,
-      head: [['Name', 'Role', 'Organization', 'Notes']],
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Name / Entity', 'Role', 'Organization', 'Involvement Notes']],
       body: filteredActors.map((a) => [
         a.name,
         a.role,
         a.organization || '—',
         a.notes || '—',
       ]),
-      theme: 'striped',
-      styles: { fontSize: 8.5, cellPadding: 5, textColor: [24, 24, 27] },
-      headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255] },
-      margin: { left: 40, right: 40 },
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: 'bold' },
+        1: { cellWidth: 95 },
+        2: { cellWidth: 115 },
+        3: { cellWidth: contentWidth - 330 },
+      },
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22;
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
-  // Narrative Sections
+  // 5. Narrative Sections
   const filteredSections = sections
-    .filter((s) => (!options.publicOnly || s.isPublic) && (!options.selectedSectionIds || options.selectedSectionIds.includes(s.id)))
+    .filter(
+      (s) =>
+        (!options.publicOnly || s.isPublic) &&
+        (!options.selectedSectionIds || options.selectedSectionIds.includes(s.id))
+    )
     .sort((a, b) => a.order - b.order);
 
   if (options.includeNarrative && filteredSections.length > 0) {
-    ensureSpace(60);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Dossier Narrative Sections', 40, y);
-    y += 20;
+    drawSectionHeading('Structured Findings', 'Dossier Narrative Sections');
 
     for (const sec of filteredSections) {
-      ensureSpace(60);
+      ensureSpace(56);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(48, 97, 208);
-      doc.text(`${String(sec.order).padStart(2, '0')}. ${sec.title}`, 40, y);
-      y += 15;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(39, 39, 42);
-      const bodyText = sec.content?.trim() || 'No narrative recorded for this section.';
-      const secLines = doc.splitTextToSize(bodyText, pageWidth - 80) as string[];
-      for (const line of secLines) {
-        ensureSpace(14);
-        doc.text(line, 40, y);
-        y += 13;
+      doc.setFontSize(10.5);
+      doc.setTextColor(...RGB.FOREST);
+      const secHeadingLines = doc.splitTextToSize(
+        `${String(sec.order).padStart(2, '0')}. ${sec.title}`,
+        contentWidth
+      ) as string[];
+      for (const hLine of secHeadingLines) {
+        ensureSpace(16);
+        doc.text(hLine, MARGIN_X, ctx.getY());
+        ctx.setY(ctx.getY() + 14);
       }
-      y += 14;
+      ctx.setY(ctx.getY() + 2);
+      drawParagraphs(sec.content?.trim() || 'No narrative recorded for this section.', 9.5, 13.5);
+      ctx.setY(ctx.getY() + 10);
     }
   }
 
-  // Documents
+  // 6. Document Vault
   const linkedDocs = vaultItems.filter(
-    (v) => v.category === 'document' && v.caseIds.includes(caseRecord.id) && (!options.publicOnly || v.isPublic)
+    (v) =>
+      v.category === 'document' &&
+      v.caseIds.includes(caseRecord.id) &&
+      (!options.publicOnly || v.isPublic)
   );
   if (options.includeDocuments && linkedDocs.length > 0) {
-    ensureSpace(100);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Document Vault Index', 40, y);
-    y += 8;
-
+    drawSectionHeading('Archival Filings', 'Document Vault Index');
     autoTable(doc, {
-      startY: y,
-      head: [['Title', 'Type', 'Visibility', 'SHA-256 Integrity Digest']],
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Title', 'Type', 'Visibility', 'SHA-256 Digest']],
       body: linkedDocs.map((d) => [
         d.title,
         d.docType || d.mediaType.toUpperCase(),
         d.isPublic ? 'Public' : 'Private',
-        d.sha256 ? `${d.sha256.slice(0, 20)}...` : 'Text Record',
+        d.sha256 ? `${d.sha256.slice(0, 24)}…` : 'Text Record',
       ]),
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 4 },
-      headStyles: { fillColor: [48, 97, 208], textColor: [255, 255, 255] },
-      margin: { left: 40, right: 40 },
+      columnStyles: {
+        0: { cellWidth: 205, fontStyle: 'bold' },
+        1: { cellWidth: 95 },
+        2: { cellWidth: 68 },
+        3: { cellWidth: contentWidth - 368 },
+      },
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22;
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
-  // Evidence
+  // 7. Evidence Library
   const linkedEvidence = vaultItems.filter(
-    (v) => v.category === 'evidence' && v.caseIds.includes(caseRecord.id) && (!options.publicOnly || v.isPublic)
+    (v) =>
+      v.category === 'evidence' &&
+      v.caseIds.includes(caseRecord.id) &&
+      (!options.publicOnly || v.isPublic)
   );
   if (options.includeEvidence && linkedEvidence.length > 0) {
-    ensureSpace(100);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Evidence Library Index', 40, y);
-    y += 8;
-
+    drawSectionHeading('Evidentiary Exhibits', 'Evidence Library Index');
     autoTable(doc, {
-      startY: y,
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
       head: [['Title', 'Format', 'Tags', 'Visibility', 'SHA-256 Digest']],
       body: linkedEvidence.map((e) => [
         e.title,
         e.mediaType.toUpperCase(),
         e.tags.join(', ') || '—',
         e.isPublic ? 'Public' : 'Private',
-        e.sha256 ? `${e.sha256.slice(0, 18)}...` : 'Text Note',
+        e.sha256 ? `${e.sha256.slice(0, 20)}…` : 'Text Note',
       ]),
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 4 },
-      headStyles: { fillColor: [48, 97, 208], textColor: [255, 255, 255] },
-      margin: { left: 40, right: 40 },
+      columnStyles: {
+        0: { cellWidth: 165, fontStyle: 'bold' },
+        1: { cellWidth: 58 },
+        2: { cellWidth: 110 },
+        3: { cellWidth: 62 },
+        4: { cellWidth: contentWidth - 395 },
+      },
     });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 22;
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
-  // Collections
+  // 8. Collections
   const linkedCollections = collections.filter(
     (c) => c.caseId === caseRecord.id && (!options.publicOnly || c.isPublic)
   );
   if (options.includeCollections && linkedCollections.length > 0) {
-    ensureSpace(90);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(9, 9, 11);
-    doc.text('Curated Evidence Collections', 40, y);
-    y += 8;
-
+    drawSectionHeading('Curated Groupings', 'Evidence Collections');
     autoTable(doc, {
-      startY: y,
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
       head: [['Collection Title', 'Items', 'Contextual Explanation']],
       body: linkedCollections.map((c) => [
         c.title,
         String(c.itemIds.length),
-        c.explanation,
+        c.explanation || '—',
       ]),
-      theme: 'striped',
-      styles: { fontSize: 8.5, cellPadding: 5 },
-      headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255] },
-      margin: { left: 40, right: 40 },
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 155, fontStyle: 'bold' },
+        1: { cellWidth: 48, halign: 'center' },
+        2: { cellWidth: contentWidth - 203 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+  }
+
+  // 9. Nexus Insights Summary
+  const nexusGraph = buildCaseNexus({
+    caseId: caseRecord.id,
+    caseNumber: caseRecord.caseNumber,
+    title: caseRecord.title,
+    sections: filteredSections,
+    timeline: filteredTimeline,
+    actors: filteredActors,
+    documents: linkedDocs,
+    evidence: linkedEvidence,
+    collections: linkedCollections,
+  });
+
+  if (nexusGraph.insights.length > 0) {
+    drawSectionHeading('Connection Patterns', 'IMnexus Structural Insights');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Pattern Type', 'Insight', 'Observed Connections']],
+      body: nexusGraph.insights.map((ins) => [
+        ins.category.toUpperCase(),
+        ins.title,
+        ins.detail,
+      ]),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 80, fontStyle: 'bold' },
+        1: { cellWidth: 160, fontStyle: 'bold' },
+        2: { cellWidth: contentWidth - 240 },
+      },
     });
   }
 
+  ctx.addRunningFooters(`IMnexus  ·  Case No. ${caseRecord.caseNumber}`);
   doc.save(`${sanitizeFileName(caseRecord.caseNumber + '-' + options.reportTitle)}.pdf`);
 }
 
 export function exportPublicSitePdf(site: PublicSite): void {
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 50;
+  const ctx = createPdfContext();
+  const { doc, pageWidth, contentWidth, ensureSpace, drawSectionHeading, drawParagraphs } = ctx;
 
-  const ensureSpace = (needed: number) => {
-    if (y + needed > 730) {
-      doc.addPage();
-      y = 50;
-    }
-  };
-
-  doc.setFillColor(48, 97, 208);
-  doc.rect(0, 0, pageWidth, 10, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.setTextColor(48, 97, 208);
-  doc.text('IMnexus Public Archive', 40, y);
-  y += 24;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(9, 9, 11);
-  const titleLines = doc.splitTextToSize(site.headline || site.title, pageWidth - 80) as string[];
-  doc.text(titleLines, 40, y);
-  y += titleLines.length * 24 + 6;
+  doc.setTextColor(...RGB.INK);
+  doc.text('IMnexus Public Archive', MARGIN_X, ctx.getY());
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(82, 82, 91);
-  doc.text(`Case No. ${site.caseNumber || 'N/A'}  ·  ${site.court || site.caseType}  ·  ${site.status}`, 40, y);
-  y += 24;
+  doc.setFontSize(8.5);
+  doc.setTextColor(...RGB.MUTED);
+  doc.text(
+    `Published Dossier  ·  Generated ${new Date().toLocaleDateString()}`,
+    pageWidth - MARGIN_X,
+    ctx.getY(),
+    { align: 'right' }
+  );
+  ctx.setY(ctx.getY() + 20);
 
-  if (site.intro) {
-    doc.setFontSize(10);
-    doc.setTextColor(39, 39, 42);
-    const introLines = doc.splitTextToSize(site.intro, pageWidth - 80) as string[];
-    for (const line of introLines) {
-      ensureSpace(14);
-      doc.text(line, 40, y);
-      y += 14;
-    }
-    y += 16;
+  // Shaded Hero Summary Box
+  const titleLines = doc.splitTextToSize(site.headline || site.title, contentWidth - 28) as string[];
+  const subText = `Case No. ${site.caseNumber || 'N/A'}  ·  ${site.court || site.caseType}  ·  Status: ${site.status}`;
+  const subLines = doc.splitTextToSize(subText, contentWidth - 28) as string[];
+  const boxHeight = titleLines.length * 21 + subLines.length * 13 + 26;
+
+  doc.setFillColor(...RGB.CREAM);
+  doc.setDrawColor(...RGB.LINE);
+  doc.setLineWidth(0.75);
+  doc.rect(MARGIN_X, ctx.getY(), contentWidth, boxHeight, 'FD');
+
+  let boxY = ctx.getY() + 22;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  doc.setTextColor(...RGB.INK);
+  doc.text(titleLines, MARGIN_X + 14, boxY);
+  boxY += titleLines.length * 21 + 2;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...RGB.MUTED);
+  doc.text(subLines, MARGIN_X + 14, boxY);
+  ctx.setY(ctx.getY() + boxHeight + 22);
+
+  // Metadata
+  drawSectionHeading('Dossier Metadata', 'Public Record Attributes');
+  const metaRows: string[][] = [
+    ['Case Number', site.caseNumber || '—'],
+    ['Jurisdiction / Entity', site.court || '—'],
+    ['Presiding Lead / Judge', site.judge || '—'],
+    ['Disposition / Status', site.disposition || site.status],
+    ...(site.charge ? [['Subject / Cause', site.charge]] : []),
+    ...(site.arrestDates ? [['Key Dates', site.arrestDates]] : []),
+    ...(site.closureDate ? [['Closure Date', site.closureDate]] : []),
+    ...(site.customFields || []).map((cf) => [cf.label, cf.value]),
+  ];
+  autoTable(doc, {
+    ...sharedTableDefaults(contentWidth),
+    startY: ctx.getY(),
+    head: [['Attribute', 'Value']],
+    body: metaRows,
+    theme: 'grid',
+    columnStyles: {
+      0: { cellWidth: 165, fontStyle: 'bold', textColor: RGB.FOREST },
+      1: { cellWidth: contentWidth - 165 },
+    },
+  });
+  ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+
+  if (site.intro?.trim()) {
+    drawSectionHeading('Overview', 'Public Dossier Summary');
+    drawParagraphs(site.intro, 9.5, 14);
+    ctx.setY(ctx.getY() + 14);
+  }
+
+  if (site.timeline?.length) {
+    drawSectionHeading('Chronology', 'Public Timeline');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Date', 'Time', 'Event', 'Details']],
+      body: site.timeline.map((ev) => [ev.date, ev.time || '—', ev.title, ev.description || '—']),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 74 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 145, fontStyle: 'bold' },
+        3: { cellWidth: contentWidth - 269 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+  }
+
+  if (site.actors?.length) {
+    drawSectionHeading('Directory', 'Key Actors & Entities');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Name', 'Role', 'Organization', 'Notes']],
+      body: site.actors.map((a) => [a.name, a.role, a.organization || '—', a.notes || '—']),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: 'bold' },
+        1: { cellWidth: 95 },
+        2: { cellWidth: 115 },
+        3: { cellWidth: contentWidth - 330 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
   }
 
   if (site.sections?.length) {
+    drawSectionHeading('Dossier Narrative', 'Published Findings & Chapters');
     for (const sec of site.sections) {
-      ensureSpace(50);
+      ensureSpace(56);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(48, 97, 208);
-      doc.text(`${String(sec.order).padStart(2, '0')}. ${sec.title}`, 40, y);
-      y += 15;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(39, 39, 42);
-      const secLines = doc.splitTextToSize(sec.content || '', pageWidth - 80) as string[];
-      for (const line of secLines) {
-        ensureSpace(14);
-        doc.text(line, 40, y);
-        y += 13;
+      doc.setFontSize(10.5);
+      doc.setTextColor(...RGB.FOREST);
+      const secHeadingLines = doc.splitTextToSize(
+        `${String(sec.order).padStart(2, '0')}. ${sec.title}`,
+        contentWidth
+      ) as string[];
+      for (const hLine of secHeadingLines) {
+        ensureSpace(16);
+        doc.text(hLine, MARGIN_X, ctx.getY());
+        ctx.setY(ctx.getY() + 14);
       }
-      y += 14;
+      ctx.setY(ctx.getY() + 2);
+      drawParagraphs(sec.content || '', 9.5, 13.5);
+      ctx.setY(ctx.getY() + 10);
     }
   }
 
+  if (site.collections?.length) {
+    drawSectionHeading('Curated Collections', 'Evidence Sets');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Collection', 'Artifacts', 'Explanation']],
+      body: site.collections.map((c) => [c.title, String(c.items.length), c.explanation || '—']),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 155, fontStyle: 'bold' },
+        1: { cellWidth: 55, halign: 'center' },
+        2: { cellWidth: contentWidth - 210 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+  }
+
+  if (site.documents?.length) {
+    drawSectionHeading('Public Documents', 'Verified Filings');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Document Title', 'Type', 'SHA-256 Digest']],
+      body: site.documents.map((d) => [
+        d.title,
+        d.docType || 'Document',
+        d.sha256 ? `${d.sha256.slice(0, 24)}…` : 'Verified Record',
+      ]),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 230, fontStyle: 'bold' },
+        1: { cellWidth: 105 },
+        2: { cellWidth: contentWidth - 335 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+  }
+
+  if (site.evidence?.length) {
+    drawSectionHeading('Evidentiary Exhibits', 'Public Evidence Gallery');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Exhibit Title', 'Format', 'Tags', 'SHA-256 Digest']],
+      body: site.evidence.map((e) => [
+        e.title,
+        e.mediaType.toUpperCase(),
+        e.tags?.join(', ') || '—',
+        e.sha256 ? `${e.sha256.slice(0, 22)}…` : 'Text Exhibit',
+      ]),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 195, fontStyle: 'bold' },
+        1: { cellWidth: 65 },
+        2: { cellWidth: 115 },
+        3: { cellWidth: contentWidth - 375 },
+      },
+    });
+    ctx.setY((doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20);
+  }
+
+  const nexusGraph = buildPublicSiteNexus(site);
+  if (nexusGraph.insights.length > 0) {
+    drawSectionHeading('Nexus Patterns', 'Mapped Connections & Insights');
+    autoTable(doc, {
+      ...sharedTableDefaults(contentWidth),
+      startY: ctx.getY(),
+      head: [['Pattern Category', 'Insight', 'Summary']],
+      body: nexusGraph.insights.map((ins) => [
+        ins.category.toUpperCase(),
+        ins.title,
+        ins.detail,
+      ]),
+      theme: 'grid',
+      columnStyles: {
+        0: { cellWidth: 95, fontStyle: 'bold' },
+        1: { cellWidth: 160, fontStyle: 'bold' },
+        2: { cellWidth: contentWidth - 255 },
+      },
+    });
+  }
+
+  ctx.addRunningFooters(`IMnexus Public Archive  ·  /site/${site.slug}`);
   doc.save(`${sanitizeFileName(site.slug)}-public-dossier.pdf`);
 }
 

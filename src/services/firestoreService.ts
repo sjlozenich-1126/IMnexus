@@ -110,18 +110,30 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     }
 
     const existing = snap.data() as UserProfile;
-    const updates: Record<string, unknown> = {
-      displayName: (user.displayName || existing.displayName || 'IMnexus User').slice(0, 120),
-      updatedAt: serverTimestamp(),
-    };
-    if (user.photoURL) {
-      updates.photoURL = user.photoURL.slice(0, 500);
+    const nextDisplayName = (
+      user.displayName ||
+      existing.displayName ||
+      'IMnexus User'
+    ).slice(0, 120);
+    const nextPhotoUrl = user.photoURL ? user.photoURL.slice(0, 500) : existing.photoURL;
+
+    const updates: Record<string, unknown> = {};
+    if (nextDisplayName !== existing.displayName) {
+      updates.displayName = nextDisplayName;
     }
-    await updateDoc(userRef, updates);
+    if (nextPhotoUrl && nextPhotoUrl !== existing.photoURL) {
+      updates.photoURL = nextPhotoUrl;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = serverTimestamp();
+      await updateDoc(userRef, updates);
+    }
+
     return {
       ...existing,
-      displayName: updates.displayName as string,
-      photoURL: user.photoURL || existing.photoURL,
+      displayName: nextDisplayName,
+      photoURL: nextPhotoUrl,
     };
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -359,7 +371,7 @@ export async function createCaseRecord(params: {
         320
       ),
       publicIntro: (params.summary || '').slice(0, 8000),
-      publicCoverUrl: '/assets/aistudio/maxim-berg-fKPZGJI4dXU-unsplash_b5b78643.jpg',
+      publicCoverUrl: '/assets/aistudio/kanhaiya-sharma-EiAqej-cGks-unsplash_c5de0270.jpg',
       customFields: [],
       tags: [],
       ownerId: params.ownerId,
@@ -1065,9 +1077,13 @@ export async function publishCaseToPublicSite(params: {
         caseRecord.publicSubtitle ||
         `${caseRecord.court || 'Public Archive'} · Case No. ${caseRecord.caseNumber}`
       ).slice(0, 320),
-      intro: (caseRecord.publicIntro || caseRecord.summary || '').slice(0, 8000),
+      intro: (
+        caseRecord.publicIntro ||
+        caseRecord.summary ||
+        `${caseRecord.title} (${caseRecord.status})${caseRecord.court ? ` — ${caseRecord.court}` : ''}. Includes ${sections.filter((s) => s.isPublic).length} report section(s), ${timeline.filter((t) => t.isPublic).length} timeline event(s), and ${publicDocs.length + publicEv.length} verified records.`
+      ).slice(0, 8000),
       coverUrl: (
-        caseRecord.publicCoverUrl || '/assets/aistudio/maxim-berg-fKPZGJI4dXU-unsplash_b5b78643.jpg'
+        caseRecord.publicCoverUrl || '/assets/aistudio/kanhaiya-sharma-EiAqej-cGks-unsplash_c5de0270.jpg'
       ).slice(0, 500),
       customFields: (caseRecord.customFields || []).slice(0, 25),
       sections: sections

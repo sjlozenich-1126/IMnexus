@@ -9,7 +9,7 @@ import {
   FileText,
   Globe,
   Layers,
-  Lock,
+  Network,
   Plus,
   Save,
   Shield,
@@ -59,8 +59,10 @@ import {
   exportCaseCustomCsv,
   exportCasePdf,
 } from '../utils/exportReports';
+import { buildSingleCaseFromWorkspace } from '../utils/nexusEngine';
 import { inferMediaType, uploadEncryptedVaultFile } from '../utils/vaultApi';
 import { StatusLabel } from './BrandMark';
+import { NexusMapView } from './NexusMapView';
 
 type CaseTab =
   | 'overview'
@@ -69,8 +71,12 @@ type CaseTab =
   | 'narrative'
   | 'documents'
   | 'evidence'
+  | 'nexus'
   | 'permissions'
   | 'public_builder';
+
+const DEFAULT_COVER_URL =
+  '/assets/aistudio/kanhaiya-sharma-EiAqej-cGks-unsplash_c5de0270.jpg';
 
 interface CaseWorkspaceProps {
   caseRecord: CaseRecord;
@@ -107,7 +113,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const [actors, setActors] = useState<CaseActor[]>([]);
   const [collaborators, setCollaborators] = useState<CaseCollaborator[]>([]);
 
-  // Editable form state synced from caseRecord
   const [form, setForm] = useState({
     caseNumber: caseRecord.caseNumber,
     title: caseRecord.title,
@@ -125,9 +130,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
     publicHeadline: caseRecord.publicHeadline || caseRecord.title,
     publicSubtitle: caseRecord.publicSubtitle || '',
     publicIntro: caseRecord.publicIntro || '',
-    publicCoverUrl:
-      caseRecord.publicCoverUrl ||
-      '/assets/aistudio/maxim-berg-fKPZGJI4dXU-unsplash_b5b78643.jpg',
+    publicCoverUrl: caseRecord.publicCoverUrl || DEFAULT_COVER_URL,
   });
   const [customFields, setCustomFields] = useState<CustomField[]>(caseRecord.customFields || []);
   const [saving, setSaving] = useState(false);
@@ -135,7 +138,6 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const [publishing, setPublishing] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
-  // Sub-forms
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
 
@@ -176,9 +178,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       publicHeadline: caseRecord.publicHeadline || caseRecord.title,
       publicSubtitle: caseRecord.publicSubtitle || '',
       publicIntro: caseRecord.publicIntro || '',
-      publicCoverUrl:
-        caseRecord.publicCoverUrl ||
-        '/assets/aistudio/maxim-berg-fKPZGJI4dXU-unsplash_b5b78643.jpg',
+      publicCoverUrl: caseRecord.publicCoverUrl || DEFAULT_COVER_URL,
     });
     setCustomFields(caseRecord.customFields || []);
   }, [caseRecord]);
@@ -227,6 +227,19 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const linkedCollections = useMemo(
     () => collections.filter((c) => c.caseId === caseRecord.id),
     [collections, caseRecord.id]
+  );
+
+  const caseNexusGraph = useMemo(
+    () =>
+      buildSingleCaseFromWorkspace({
+        caseRecord,
+        sections,
+        timeline,
+        actors,
+        vaultItems,
+        collections,
+      }),
+    [caseRecord, sections, timeline, actors, vaultItems, collections]
   );
 
   const showFlash = (msg: string) => {
@@ -333,16 +346,21 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
 
   const shareableUrl = `${window.location.origin}/site/${slugify(form.publicSlug)}`;
 
+  const inputClass =
+    'w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] text-[#0f1210] dark:text-[#f3f0e9] outline-none focus:border-[#b5b0a4] dark:focus:border-[#6a716b]';
+  const labelClass =
+    'block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] dark:text-[#8d948e] mb-1';
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Case Header Card */}
-      <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2.5">
+      <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-5 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#6a716b] dark:text-[#8d948e] mb-2">
           <div>
             <button
               type="button"
               onClick={onBack}
-              className="hover:text-zinc-950 dark:hover:text-white cursor-pointer"
+              className="hover:text-[#0f1210] dark:hover:text-[#f3f0e9] cursor-pointer"
             >
               Cases
             </button>
@@ -350,19 +368,19 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             <span className="font-mono-tabular">{caseRecord.caseNumber}</span>
           </div>
           {saveNotice && (
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+            <span className="text-xs font-medium text-[#2d5a3d] dark:text-[#7fb892]">
               {saveNotice}
             </span>
           )}
         </div>
 
-        <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-zinc-950 dark:text-white leading-snug mb-1.5">
+        <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#0f1210] dark:text-[#f3f0e9] leading-snug mb-1">
           {caseRecord.title}
         </h1>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-[#6a716b] dark:text-[#8d948e]">
           <span>
-            Case No. <code className="font-mono-tabular">{caseRecord.caseNumber}</code>
+            Case No. <code className="font-mono-tabular text-xs">{caseRecord.caseNumber}</code>
           </span>
           {caseRecord.court && (
             <>
@@ -386,26 +404,35 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-4">
+        <div className="flex flex-wrap items-center gap-2 mt-3.5">
           {caseRecord.isPublished ? (
             <button
               type="button"
               onClick={() => onOpenPublicSite(caseRecord.publicSlug)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>View Public Site</span>
+              <span>Preview Public</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setActiveTab('public_builder')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5" />
               <span>Configure Public Site</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('nexus')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
+          >
+            <Network className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
+            <span>Nexus Map ({caseNexusGraph.edges.length})</span>
+          </button>
 
           <button
             type="button"
@@ -420,7 +447,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 options: DEFAULT_COMPLETE_REPORT_OPTIONS,
               })
             }
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -439,7 +466,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 options: DEFAULT_COMPLETE_REPORT_OPTIONS,
               })
             }
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -450,17 +477,17 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               type="button"
               onClick={handleSaveMetadata}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] disabled:opacity-60 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 disabled:opacity-60 cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>{saving ? 'Saving...' : 'Save'}</span>
+              <span>{saving ? 'Saving…' : 'Save'}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto">
+      <div className="flex border-b border-[#ddd8ce] dark:border-[#262b27] overflow-x-auto">
         {(
           [
             ['overview', 'Overview'],
@@ -469,18 +496,19 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             ['narrative', `Narrative Sections (${sections.length})`],
             ['documents', `Documents (${linkedDocs.length})`],
             ['evidence', `Evidence (${linkedEvidence.length})`],
+            ['nexus', `Nexus Map (${caseNexusGraph.edges.length})`],
             ['permissions', 'Stakeholder Roles'],
-            ['public_builder', 'Public Site Builder'],
+            ['public_builder', 'Public Settings'],
           ] as Array<[CaseTab, string]>
         ).map(([tabKey, label]) => (
           <button
             key={tabKey}
             type="button"
             onClick={() => setActiveTab(tabKey)}
-            className={`px-3.5 py-2.5 text-xs whitespace-nowrap shrink-0 border-b-2 transition-colors cursor-pointer ${
+            className={`px-3.5 py-2.5 text-[13px] whitespace-nowrap shrink-0 border-b-2 transition-colors cursor-pointer ${
               activeTab === tabKey
-                ? 'border-[#3061d0] text-zinc-950 dark:text-white font-bold'
-                : 'border-transparent text-zinc-500 dark:text-zinc-400 font-medium hover:text-zinc-900 dark:hover:text-zinc-200'
+                ? 'border-[#0f1210] dark:border-[#f3f0e9] text-[#0f1210] dark:text-[#f3f0e9] font-medium'
+                : 'border-transparent text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
             }`}
           >
             {label}
@@ -489,36 +517,32 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       </div>
 
       {/* Tab Content + Right Actions Rail */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_205px] gap-4 items-start">
         <div className="space-y-4 min-w-0">
           {activeTab === 'overview' && (
             <>
-              <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-                <h3 className="text-sm font-bold mb-4">Case Metadata</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px]">
+                <h3 className="text-[13px] font-semibold mb-3.5">Case Metadata</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Case Number
-                    </label>
+                    <label className={labelClass}>Case Number</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.caseNumber}
                       onChange={(e) => setForm({ ...form, caseNumber: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Classification
-                    </label>
+                    <label className={labelClass}>Classification</label>
                     <select
                       disabled={!canEdit}
                       value={form.caseType}
                       onChange={(e) =>
                         setForm({ ...form, caseType: e.target.value as CaseType })
                       }
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none"
+                      className={inputClass}
                     >
                       <option value="legal">Legal Case</option>
                       <option value="investigation">Investigation</option>
@@ -526,64 +550,54 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     </select>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Caption / Title
-                    </label>
+                    <label className={labelClass}>Caption / Title</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.title}
                       onChange={(e) => setForm({ ...form, title: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Jurisdiction / Court / Org
-                    </label>
+                    <label className={labelClass}>Jurisdiction / Court / Org</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.court}
                       onChange={(e) => setForm({ ...form, court: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Presiding Judge / Lead
-                    </label>
+                    <label className={labelClass}>Presiding Judge / Lead</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.judge}
                       onChange={(e) => setForm({ ...form, judge: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Alleged Cause / Charge
-                    </label>
+                    <label className={labelClass}>Alleged Cause / Charge</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.charge}
                       onChange={(e) => setForm({ ...form, charge: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Status
-                    </label>
+                    <label className={labelClass}>Status</label>
                     <select
                       disabled={!canEdit}
                       value={form.status}
                       onChange={(e) =>
                         setForm({ ...form, status: e.target.value as CaseStatus })
                       }
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none"
+                      className={inputClass}
                     >
                       <option value="Active">Active</option>
                       <option value="In Review">In Review</option>
@@ -593,67 +607,70 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Arrest / Key Dates
-                    </label>
+                    <label className={labelClass}>Arrest / Key Dates</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.arrestDates}
                       onChange={(e) => setForm({ ...form, arrestDates: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Official Closure Date
-                    </label>
+                    <label className={labelClass}>Official Closure Date</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.closureDate}
                       onChange={(e) => setForm({ ...form, closureDate: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Final Disposition / Outcome
-                    </label>
+                    <label className={labelClass}>Final Disposition / Outcome</label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.disposition}
                       onChange={(e) => setForm({ ...form, disposition: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                      Executive Summary
-                    </label>
+                    <label className={labelClass}>Case Tags (comma-separated for Nexus mapping)</label>
+                    <input
+                      type="text"
+                      disabled={!canEdit}
+                      value={form.tags}
+                      onChange={(e) => setForm({ ...form, tags: e.target.value })}
+                      placeholder="e.g. civil-rights, municode, bodycam"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Executive Summary</label>
                     <textarea
                       rows={4}
                       disabled={!canEdit}
                       value={form.summary}
                       onChange={(e) => setForm({ ...form, summary: e.target.value })}
-                      className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                      className={inputClass}
                     />
                   </div>
                 </div>
               </div>
 
               {/* Custom Metadata Fields */}
-              <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
+              <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px]">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold">Custom Fields</h3>
+                  <h3 className="text-[13px] font-semibold">Custom Fields</h3>
                   {canEdit && (
                     <button
                       type="button"
                       onClick={() =>
                         setCustomFields([...customFields, { label: '', value: '' }])
                       }
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210] cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Add Custom Field</span>
@@ -661,7 +678,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   )}
                 </div>
                 {customFields.length === 0 ? (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-[#6a716b]">
                     Add custom key-value attributes (docket numbers, counsel, filing status) tailored to this case.
                   </p>
                 ) : (
@@ -678,7 +695,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             next[idx] = { ...next[idx], label: e.target.value };
                             setCustomFields(next);
                           }}
-                          className="px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                          className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                         />
                         <input
                           type="text"
@@ -690,7 +707,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             next[idx] = { ...next[idx], value: e.target.value };
                             setCustomFields(next);
                           }}
-                          className="px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                          className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                         />
                         {canEdit && (
                           <button
@@ -698,7 +715,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             onClick={() =>
                               setCustomFields(customFields.filter((_, i) => i !== idx))
                             }
-                            className="p-1.5 text-zinc-400 hover:text-red-500 cursor-pointer"
+                            className="p-1.5 text-[#6a716b] hover:text-[#8b3a3a] cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -709,20 +726,20 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 )}
               </div>
 
-              {/* Quick Sections Overview */}
-              <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
+              {/* Report Sections Quick Overview */}
+              <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px]">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold">Report Sections</h3>
+                  <h3 className="text-[13px] font-semibold">Report Sections</h3>
                   <button
                     type="button"
                     onClick={() => setActiveTab('narrative')}
-                    className="text-xs font-semibold text-[#3061d0] dark:text-blue-400 hover:underline cursor-pointer"
+                    className="text-xs font-medium text-[#2d5a3d] dark:text-[#7fb892] hover:underline cursor-pointer"
                   >
-                    Manage All Sections →
+                    + Manage Sections
                   </button>
                 </div>
                 {sections.length === 0 ? (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-[#6a716b]">
                     No narrative sections added yet. Switch to Narrative Sections to add modular dossier chapters.
                   </p>
                 ) : (
@@ -730,19 +747,20 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     {sections.map((sec) => (
                       <li
                         key={sec.id}
-                        className="flex items-center justify-between gap-3 px-3 py-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-xs font-medium"
+                        className="flex items-center gap-2.5 px-2.5 py-2 border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[13px]"
                       >
+                        <span className="text-[#6a716b] text-xs select-none">⠿</span>
                         <span className="truncate">
-                          <span className="font-mono-tabular text-zinc-400 mr-2">
+                          <span className="font-mono-tabular text-xs text-[#6a716b] mr-1.5">
                             {String(sec.order).padStart(2, '0')}.
                           </span>
                           {sec.title}
                         </span>
                         <span
-                          className={`text-[11px] font-semibold shrink-0 ${
+                          className={`ml-auto text-[11px] shrink-0 ${
                             sec.isPublic
-                              ? 'text-emerald-700 dark:text-emerald-400'
-                              : 'text-zinc-500'
+                              ? 'text-[#2d5a3d] dark:text-[#7fb892]'
+                              : 'text-[#6a716b]'
                           }`}
                         >
                           {sec.isPublic ? 'Published' : 'Private'}
@@ -756,9 +774,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'timeline' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold">Chronological Timeline of Events</h3>
+                <h3 className="text-[13px] font-semibold">Chronological Timeline of Events</h3>
               </div>
 
               {canEdit && (
@@ -780,9 +798,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     setEvtTitle('');
                     setEvtDesc('');
                   }}
-                  className="p-4 rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3"
+                  className="p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] space-y-3"
                 >
-                  <div className="text-xs font-bold">Add Timeline Event</div>
+                  <div className="text-xs font-semibold">Add Timeline Event</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <input
                       type="text"
@@ -790,14 +808,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       value={evtDate}
                       onChange={(e) => setEvtDate(e.target.value)}
                       placeholder="Date (e.g. 2021-03-07)"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                     <input
                       type="text"
                       value={evtTime}
                       onChange={(e) => setEvtTime(e.target.value)}
                       placeholder="Time (e.g. 14:22)"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                     <input
                       type="text"
@@ -805,15 +823,15 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       value={evtTitle}
                       onChange={(e) => setEvtTitle(e.target.value)}
                       placeholder="Event title *"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                   </div>
                   <textarea
                     rows={2}
                     value={evtDesc}
                     onChange={(e) => setEvtDesc(e.target.value)}
-                    placeholder="Event details & citations..."
-                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                    placeholder="Event details & citations…"
+                    className="w-full px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                   />
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 text-xs cursor-pointer">
@@ -826,7 +844,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     </label>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       + Add Event
                     </button>
@@ -835,21 +853,21 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               )}
 
               {timeline.length === 0 ? (
-                <p className="text-xs text-zinc-500">No timeline events recorded yet.</p>
+                <p className="text-xs text-[#6a716b]">No timeline events recorded yet.</p>
               ) : (
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
                   {timeline.map((ev) => (
                     <div key={ev.id} className="py-3.5 flex items-start justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="font-mono-tabular font-semibold text-[#3061d0] dark:text-blue-400">
+                          <span className="font-mono-tabular font-medium text-[#2d5a3d] dark:text-[#7fb892]">
                             {ev.date} {ev.time ? `· ${ev.time}` : ''}
                           </span>
                           <StatusLabel status={ev.isPublic ? 'Public' : 'Private'} />
                         </div>
-                        <div className="text-sm font-bold">{ev.title}</div>
+                        <div className="text-[13px] font-semibold">{ev.title}</div>
                         {ev.description && (
-                          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                          <p className="text-xs text-[#6a716b] dark:text-[#8d948e] leading-relaxed">
                             {ev.description}
                           </p>
                         )}
@@ -863,14 +881,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                 isPublic: !ev.isPublic,
                               })
                             }
-                            className="px-2 py-1 text-[11px] font-semibold rounded border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                            className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                           >
                             {ev.isPublic ? 'Make Private' : 'Make Public'}
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteTimelineEvent(caseRecord.id, ev.id)}
-                            className="p-1 text-zinc-400 hover:text-red-500 cursor-pointer"
+                            className="p-1 text-[#6a716b] hover:text-[#8b3a3a] cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -884,8 +902,8 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'actors' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
-              <h3 className="text-sm font-bold">Key Actors, Entities &amp; Counsel Matrix</h3>
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
+              <h3 className="text-[13px] font-semibold">Key Actors, Entities &amp; Counsel Matrix</h3>
 
               {canEdit && (
                 <form
@@ -906,7 +924,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     setActorOrg('');
                     setActorNotes('');
                   }}
-                  className="p-4 rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3"
+                  className="p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] space-y-3"
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <input
@@ -915,7 +933,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       value={actorName}
                       onChange={(e) => setActorName(e.target.value)}
                       placeholder="Full Name / Entity *"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                     <input
                       type="text"
@@ -923,22 +941,22 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       value={actorRole}
                       onChange={(e) => setActorRole(e.target.value)}
                       placeholder="Role (e.g. Presiding Judge) *"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                     <input
                       type="text"
                       value={actorOrg}
                       onChange={(e) => setActorOrg(e.target.value)}
                       placeholder="Organization / Court"
-                      className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                   </div>
                   <input
                     type="text"
                     value={actorNotes}
                     onChange={(e) => setActorNotes(e.target.value)}
-                    placeholder="Notes on involvement..."
-                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                    placeholder="Notes on involvement…"
+                    className="w-full px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                   />
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 text-xs cursor-pointer">
@@ -951,7 +969,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     </label>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       + Add Actor
                     </button>
@@ -960,22 +978,22 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               )}
 
               {actors.length === 0 ? (
-                <p className="text-xs text-zinc-500">No actors recorded yet.</p>
+                <p className="text-xs text-[#6a716b]">No actors recorded yet.</p>
               ) : (
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
                   {actors.map((act) => (
                     <div key={act.id} className="py-3 flex items-start justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold">{act.name}</span>
+                          <span className="text-[13px] font-semibold">{act.name}</span>
                           <StatusLabel status={act.isPublic ? 'Public' : 'Private'} />
                         </div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <div className="text-xs text-[#6a716b] dark:text-[#8d948e]">
                           {act.role}
                           {act.organization ? ` · ${act.organization}` : ''}
                         </div>
                         {act.notes && (
-                          <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
+                          <p className="text-xs text-[#0f1210]/80 dark:text-[#f3f0e9]/80 mt-1">
                             {act.notes}
                           </p>
                         )}
@@ -989,14 +1007,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                 isPublic: !act.isPublic,
                               })
                             }
-                            className="px-2 py-1 text-[11px] font-semibold rounded border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                            className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                           >
                             {act.isPublic ? 'Make Private' : 'Make Public'}
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteCaseActor(caseRecord.id, act.id)}
-                            className="p-1 text-zinc-400 hover:text-red-500 cursor-pointer"
+                            className="p-1 text-[#6a716b] hover:text-[#8b3a3a] cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1010,9 +1028,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'narrative' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-bold">Narrative &amp; Dossier Sections</h3>
+                <h3 className="text-[13px] font-semibold">Narrative &amp; Dossier Sections</h3>
                 {canEdit && (
                   <form
                     onSubmit={async (e) => {
@@ -1035,12 +1053,12 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       value={newSectionTitle}
                       onChange={(e) => setNewSectionTitle(e.target.value)}
-                      placeholder="New section title..."
-                      className="px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                      placeholder="New section title…"
+                      className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                     />
                     <button
                       type="submit"
-                      className="px-3 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       + Add Section
                     </button>
@@ -1049,7 +1067,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               </div>
 
               {sections.length === 0 ? (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[#6a716b]">
                   Add modular narrative sections to build the complete case dossier and public report.
                 </p>
               ) : (
@@ -1059,11 +1077,11 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     return (
                       <div
                         key={sec.id}
-                        className="border border-zinc-200 dark:border-zinc-800 rounded-md p-4 bg-zinc-50/70 dark:bg-zinc-900/50 space-y-2.5"
+                        className="border border-[#ddd8ce] dark:border-[#262b27] p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] space-y-2.5"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono-tabular text-xs font-bold text-[#3061d0]">
+                            <span className="font-mono-tabular text-xs font-medium text-[#2d5a3d] dark:text-[#7fb892]">
                               {String(sec.order).padStart(2, '0')}.
                             </span>
                             {isEditing && canEdit ? (
@@ -1075,10 +1093,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                     title: e.target.value,
                                   })
                                 }
-                                className="px-2 py-1 text-sm font-bold bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded"
+                                className="px-2 py-1 text-[13px] font-semibold bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                               />
                             ) : (
-                              <span className="text-sm font-bold truncate">{sec.title}</span>
+                              <span className="text-[13px] font-semibold truncate">{sec.title}</span>
                             )}
                           </div>
 
@@ -1098,7 +1116,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                       order: sec.order,
                                     });
                                   }}
-                                  className="p-1 text-zinc-400 hover:text-zinc-900 disabled:opacity-30 cursor-pointer"
+                                  className="p-1 text-[#6a716b] hover:text-[#0f1210] disabled:opacity-30 cursor-pointer"
                                   title="Move up"
                                 >
                                   <ArrowUp className="w-3.5 h-3.5" />
@@ -1115,7 +1133,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                       order: sec.order,
                                     });
                                   }}
-                                  className="p-1 text-zinc-400 hover:text-zinc-900 disabled:opacity-30 cursor-pointer"
+                                  className="p-1 text-[#6a716b] hover:text-[#0f1210] disabled:opacity-30 cursor-pointer"
                                   title="Move down"
                                 >
                                   <ArrowDown className="w-3.5 h-3.5" />
@@ -1127,7 +1145,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                       isPublic: !sec.isPublic,
                                     })
                                   }
-                                  className="px-2 py-1 text-[11px] font-semibold rounded border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                                  className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                                 >
                                   {sec.isPublic ? 'Hide' : 'Publish'}
                                 </button>
@@ -1136,14 +1154,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                   onClick={() =>
                                     setEditingSectionId(isEditing ? null : sec.id)
                                   }
-                                  className="px-2 py-1 text-[11px] font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                                  className="px-2 py-1 text-[11px] font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                                 >
                                   {isEditing ? 'Done' : 'Edit'}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void deleteCaseSection(caseRecord.id, sec.id)}
-                                  className="p-1 text-zinc-400 hover:text-red-500 cursor-pointer"
+                                  className="p-1 text-[#6a716b] hover:text-[#8b3a3a] cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1161,11 +1179,11 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                                 content: e.target.value,
                               })
                             }
-                            placeholder="Write section narrative, legal analysis, or factual findings..."
-                            className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded outline-none focus:border-[#3061d0]"
+                            placeholder="Write section narrative, legal analysis, or factual findings…"
+                            className="w-full px-3 py-2 text-[13px] bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                           />
                         ) : (
-                          <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
+                          <p className="text-xs text-[#6a716b] dark:text-[#c4bfb4] leading-relaxed whitespace-pre-line">
                             {sec.content || 'Empty section — click Edit to add content.'}
                           </p>
                         )}
@@ -1178,9 +1196,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'documents' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-4">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-bold">Case Documents</h3>
+                <h3 className="text-[13px] font-semibold">Case Documents</h3>
                 {canEdit && (
                   <div className="flex items-center gap-2">
                     {unlinkedDocs.length > 0 && (
@@ -1195,9 +1213,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                           }
                           e.target.value = '';
                         }}
-                        className="px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                        className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                       >
-                        <option value="">+ Link from Vault...</option>
+                        <option value="">+ Link from Vault…</option>
                         {unlinkedDocs.map((d) => (
                           <option key={d.id} value={d.id}>
                             {d.title}
@@ -1208,7 +1226,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     <button
                       type="button"
                       onClick={() => quickDocRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Upload Document</span>
@@ -1227,16 +1245,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               </div>
 
               {linkedDocs.length === 0 ? (
-                <p className="text-xs text-zinc-500">No documents linked to this case yet.</p>
+                <p className="text-xs text-[#6a716b]">No documents linked to this case yet.</p>
               ) : (
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
                   {linkedDocs.map((d) => (
                     <div key={d.id} className="py-3 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+                        <FileText className="w-4 h-4 text-[#6a716b] shrink-0" />
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold truncate">{d.title}</div>
-                          <div className="text-[11px] text-zinc-500">
+                          <div className="text-[13px] font-medium truncate">{d.title}</div>
+                          <div className="text-[11px] text-[#6a716b] font-mono-tabular">
                             {d.docType || d.mediaType.toUpperCase()} · SHA-256{' '}
                             {d.sha256 ? `${d.sha256.slice(0, 12)}…` : 'Note'}
                           </div>
@@ -1250,7 +1268,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             onClick={() =>
                               void updateVaultItem(d, { isPublic: !d.isPublic })
                             }
-                            className="px-2 py-1 text-[11px] font-semibold rounded border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                            className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                           >
                             {d.isPublic ? 'Make Private' : 'Make Public'}
                           </button>
@@ -1264,9 +1282,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'evidence' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-bold">Case Evidence &amp; Collections</h3>
+                <h3 className="text-[13px] font-semibold">Case Evidence &amp; Collections</h3>
                 {canEdit && (
                   <div className="flex items-center gap-2">
                     {unlinkedEvidence.length > 0 && (
@@ -1281,9 +1299,9 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                           }
                           e.target.value = '';
                         }}
-                        className="px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                        className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                       >
-                        <option value="">+ Link from Library...</option>
+                        <option value="">+ Link from Library…</option>
                         {unlinkedEvidence.map((ev) => (
                           <option key={ev.id} value={ev.id}>
                             {ev.title}
@@ -1294,7 +1312,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     <button
                       type="button"
                       onClick={() => quickEvRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Upload Evidence</span>
@@ -1314,23 +1332,23 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
 
               {linkedCollections.length > 0 && (
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] mb-2">
                     Assigned Collections
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {linkedCollections.map((col) => (
                       <div
                         key={col.id}
-                        className="p-3.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900"
+                        className="p-3.5 border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#0c0e0c]"
                       >
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-xs font-bold flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5 text-[#3061d0]" />
+                          <span className="text-xs font-semibold flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
                             {col.title}
                           </span>
                           <StatusLabel status={col.isPublic ? 'Public' : 'Private'} />
                         </div>
-                        <p className="text-[11px] text-zinc-500 line-clamp-2">
+                        <p className="text-[11px] text-[#6a716b] line-clamp-2">
                           {col.explanation}
                         </p>
                       </div>
@@ -1340,14 +1358,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               )}
 
               {linkedEvidence.length === 0 ? (
-                <p className="text-xs text-zinc-500">No evidence items linked to this case yet.</p>
+                <p className="text-xs text-[#6a716b]">No evidence items linked to this case yet.</p>
               ) : (
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
                   {linkedEvidence.map((item) => (
                     <div key={item.id} className="py-3 flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">{item.title}</div>
-                        <div className="text-[11px] text-zinc-500 font-mono-tabular">
+                        <div className="text-[13px] font-medium truncate">{item.title}</div>
+                        <div className="text-[11px] text-[#6a716b] font-mono-tabular">
                           {item.mediaType.toUpperCase()}
                           {item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
                         </div>
@@ -1360,7 +1378,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                             onClick={() =>
                               void updateVaultItem(item, { isPublic: !item.isPublic })
                             }
-                            className="px-2 py-1 text-[11px] font-semibold rounded border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                            className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                           >
                             {item.isPublic ? 'Make Private' : 'Make Public'}
                           </button>
@@ -1373,11 +1391,24 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             </div>
           )}
 
+          {activeTab === 'nexus' && (
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px]">
+              <NexusMapView
+                graph={caseNexusGraph}
+                compact
+                subtitle="Interactive mapping of actors, dated events, curated collections, shared #tags, and corroborating artifacts inside this case."
+                onInspectNodeArtifact={(node) =>
+                  setActiveTab(node.kind === 'document' ? 'documents' : 'evidence')
+                }
+              />
+            </div>
+          )}
+
           {activeTab === 'permissions' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#3061d0]" />
-                <h3 className="text-sm font-bold">Stakeholder Access &amp; Permissions (RBAC)</h3>
+                <Users className="w-4 h-4 text-[#2d5a3d] dark:text-[#7fb892]" />
+                <h3 className="text-[13px] font-semibold">Stakeholder Access &amp; Permissions (RBAC)</h3>
               </div>
 
               {isOwnerOrAdmin && (
@@ -1398,7 +1429,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     setCollabEmail('');
                     showFlash('Stakeholder permission added.');
                   }}
-                  className="p-4 rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-2.5"
+                  className="p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] flex flex-col sm:flex-row gap-2.5"
                 >
                   <input
                     type="email"
@@ -1406,12 +1437,12 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     value={collabEmail}
                     onChange={(e) => setCollabEmail(e.target.value)}
                     placeholder="stakeholder@organization.org"
-                    className="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                    className="flex-1 px-3 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                   />
                   <select
                     value={collabRole}
                     onChange={(e) => setCollabRole(e.target.value as CaseCollaboratorRole)}
-                    className="px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded"
+                    className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                   >
                     <option value="editor">Editor (Edit &amp; Add)</option>
                     <option value="reviewer">Reviewer (Read &amp; Export)</option>
@@ -1419,7 +1450,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   </select>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded bg-[#3061d0] text-white cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     <span>Grant Access</span>
@@ -1427,11 +1458,11 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 </form>
               )}
 
-              <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
                 <div className="py-2.5 flex items-center justify-between text-xs">
                   <div>
-                    <span className="font-bold">Case Owner</span>
-                    <span className="text-zinc-500 ml-2 font-mono-tabular">
+                    <span className="font-semibold">Case Owner</span>
+                    <span className="text-[#6a716b] ml-2 font-mono-tabular">
                       {caseRecord.ownerId}
                     </span>
                   </div>
@@ -1440,14 +1471,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 {collaborators.map((col) => (
                   <div key={col.id} className="py-2.5 flex items-center justify-between text-xs">
                     <div>
-                      <span className="font-semibold">{col.email}</span>
-                      <span className="ml-2 text-zinc-500 capitalize">({col.role})</span>
+                      <span className="font-medium">{col.email}</span>
+                      <span className="ml-2 text-[#6a716b] capitalize">({col.role})</span>
                     </div>
                     {isOwnerOrAdmin && (
                       <button
                         type="button"
                         onClick={() => void removeCaseCollaborator(caseRecord, col)}
-                        className="text-red-600 hover:underline cursor-pointer"
+                        className="text-[#8b3a3a] hover:underline cursor-pointer"
                       >
                         Revoke
                       </button>
@@ -1459,27 +1490,26 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
 
           {activeTab === 'public_builder' && (
-            <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5 space-y-5">
+            <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-[#3061d0]" />
+                  <h3 className="text-[13px] font-semibold flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[#2d5a3d] dark:text-[#7fb892]" />
                     <span>Public Site Builder</span>
                   </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    Pulls all Public sections, timeline events, actors, documents, evidence, and collections into one standalone public URL.
+                  <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5">
+                    Pulls all Public sections, timeline events, actors, documents, evidence, collections, and visual Nexus mapping into one standalone public URL.
                   </p>
                 </div>
                 <StatusLabel status={caseRecord.isPublished ? 'Published' : 'Unpublished'} />
               </div>
 
-              {/* Shareable URL Box */}
-              <div className="p-4 rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-0.5">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-0.5">
                     Generated Public Site URL
                   </div>
-                  <div className="font-mono-tabular text-xs font-semibold text-[#3061d0] dark:text-blue-400 truncate">
+                  <div className="font-mono-tabular text-xs font-medium text-[#2d5a3d] dark:text-[#7fb892] truncate">
                     {shareableUrl}
                   </div>
                 </div>
@@ -1491,16 +1521,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       setCopiedUrl(true);
                       setTimeout(() => setCopiedUrl(false), 1800);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] cursor-pointer"
                   >
-                    {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedUrl ? <Check className="w-3.5 h-3.5 text-[#2d5a3d]" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedUrl ? 'Copied' : 'Copy URL'}</span>
                   </button>
                   {caseRecord.isPublished && (
                     <button
                       type="button"
                       onClick={() => onOpenPublicSite(caseRecord.publicSlug)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>Open Site</span>
@@ -1511,35 +1541,31 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                    URL Slug
-                  </label>
+                  <label className={labelClass}>URL Slug</label>
                   <input
                     type="text"
                     disabled={!isOwnerOrAdmin}
                     value={form.publicSlug}
                     onChange={(e) => setForm({ ...form, publicSlug: slugify(e.target.value) })}
-                    className="w-full px-3 py-2 text-xs font-mono-tabular bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className={`${inputClass} font-mono-tabular text-xs`}
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                    Hero Cover Image
-                  </label>
+                  <label className={labelClass}>Hero Cover Image</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.publicCoverUrl}
                       onChange={(e) => setForm({ ...form, publicCoverUrl: e.target.value })}
-                      className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                      className={inputClass}
                     />
                     {canEdit && (
                       <>
                         <button
                           type="button"
                           onClick={() => coverFileRef.current?.click()}
-                          className="px-3 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                          className="px-3 py-2 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer shrink-0"
                         >
                           Upload
                         </button>
@@ -1563,45 +1589,39 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   </div>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                    Public Site Headline
-                  </label>
+                  <label className={labelClass}>Public Site Headline</label>
                   <input
                     type="text"
                     disabled={!canEdit}
                     value={form.publicHeadline}
                     onChange={(e) => setForm({ ...form, publicHeadline: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className={inputClass}
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                    Public Subtitle
-                  </label>
+                  <label className={labelClass}>Public Subtitle</label>
                   <input
                     type="text"
                     disabled={!canEdit}
                     value={form.publicSubtitle}
                     onChange={(e) => setForm({ ...form, publicSubtitle: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className={inputClass}
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                    Public Dossier Introduction
-                  </label>
+                  <label className={labelClass}>Public Dossier Short Description / Introduction</label>
                   <textarea
                     rows={4}
                     disabled={!canEdit}
                     value={form.publicIntro}
                     onChange={(e) => setForm({ ...form, publicIntro: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    placeholder="Concise summary displayed on the Public Archive directory card and the dossier site overview…"
+                    className={inputClass}
                   />
                 </div>
               </div>
 
-              {/* Public Content Inclusion Summary */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
                 {[
                   ['Public Sections', sections.filter((s) => s.isPublic).length],
                   ['Timeline Events', timeline.filter((t) => t.isPublic).length],
@@ -1611,20 +1631,20 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 ].map(([label, count]) => (
                   <div
                     key={String(label)}
-                    className="p-3 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900"
+                    className="p-3 border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#0c0e0c]"
                   >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <div className="text-[10px] uppercase tracking-[0.08em] text-[#6a716b]">
                       {label}
                     </div>
-                    <div className="text-lg font-bold tabular-nums mt-0.5">{count}</div>
+                    <div className="text-lg font-semibold font-mono-tabular mt-0.5">{count}</div>
                   </div>
                 ))}
               </div>
 
               {isOwnerOrAdmin && (
-                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-zinc-500 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-[#3061d0]" />
+                <div className="pt-3 border-t border-[#ddd8ce] dark:border-[#262b27] flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-[#6a716b] flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
                     <span>Only items explicitly marked Public are synced to the public URL.</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1633,7 +1653,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         type="button"
                         onClick={handleUnpublish}
                         disabled={publishing}
-                        className="px-3.5 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                        className="px-3.5 py-2 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210] cursor-pointer"
                       >
                         Unpublish
                       </button>
@@ -1642,10 +1662,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="button"
                       onClick={handlePublish}
                       disabled={publishing}
-                      className="px-4 py-2 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] disabled:opacity-50 cursor-pointer"
+                      className="px-4 py-2 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 disabled:opacity-50 cursor-pointer"
                     >
                       {publishing
-                        ? 'Publishing...'
+                        ? 'Publishing…'
                         : caseRecord.isPublished
                         ? 'Republish Updates'
                         : 'Publish Public Site'}
@@ -1657,16 +1677,16 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           )}
         </div>
 
-        {/* Right Actions Panel (matches prototype) */}
-        <aside className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 space-y-1">
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 px-2 pb-2">
+        {/* Right Actions Panel (matching design artifact) */}
+        <aside className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-[18px] space-y-0.5">
+          <h4 className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] pb-2">
             Actions
           </h4>
           {canEdit && (
             <button
               type="button"
               onClick={handleSaveMetadata}
-              className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+              className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
             >
               Update Case
             </button>
@@ -1684,14 +1704,21 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 options: DEFAULT_COMPLETE_REPORT_OPTIONS,
               })
             }
-            className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
           >
-            Export Complete PDF
+            Export PDF Report
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('nexus')}
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
+          >
+            View Nexus Map
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('public_builder')}
-            className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
           >
             Public Site Builder
           </button>
@@ -1699,43 +1726,43 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
             <button
               type="button"
               onClick={caseRecord.isPublished ? handleUnpublish : handlePublish}
-              className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+              className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
             >
-              {caseRecord.isPublished ? 'Unpublish Site' : 'Publish Site'}
+              {caseRecord.isPublished ? 'Unpublish Site' : 'Publish / Unpublish'}
             </button>
           )}
-          <hr className="border-zinc-200 dark:border-zinc-800 my-2" />
+          <hr className="border-[#ddd8ce] dark:border-[#262b27] my-2" />
           <button
             type="button"
             onClick={() => setActiveTab('timeline')}
-            className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
           >
             + Add Timeline Event
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('documents')}
-            className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
           >
-            + Link / Upload Document
+            + Upload Document
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('evidence')}
-            className="w-full text-left px-2.5 py-2 text-xs font-medium rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="w-full text-left px-2.5 py-2 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.04] cursor-pointer"
           >
-            + Link / Add Evidence
+            + Add Evidence
           </button>
           {isOwnerOrAdmin && (
             <>
-              <hr className="border-zinc-200 dark:border-zinc-800 my-2" />
+              <hr className="border-[#ddd8ce] dark:border-[#262b27] my-2" />
               <button
                 type="button"
                 onClick={async () => {
                   await deleteCaseRecord(caseRecord.id);
                   onBack();
                 }}
-                className="w-full text-left px-2.5 py-2 text-xs font-semibold text-red-600 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                className="w-full text-left px-2.5 py-2 text-xs text-[#8b3a3a] dark:text-[#e38b8b] hover:bg-[#8b3a3a]/10 cursor-pointer"
               >
                 Delete Case
               </button>

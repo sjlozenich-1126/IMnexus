@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<!-- saved from url=(0058)file:///C:/Users/shane/OneDrive/Downloads/imnexus-app.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IMnexus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com/">
+  <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+  <link href="./IMnexus_files/css2" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #f3f0e9;
+      --cream-soft: #faf8f4;
+      --ink: #0f1210;
+      --muted: #6a716b;
+      --line: #ddd8ce;
+      --line-soft: #e9e5db;
+      --dark: #0c0e0c;
+      --dark-sidebar: #111413;
+      --dark-card: #161916;
+      --accent: #1a2e24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 210px;
+      background: var(--dark-sidebar);
+      color: rgba(255,255,255,0.6);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-brand {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+    .sidebar-nav { flex: 1; padding: 10px 0; }
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      cursor: pointer;
+    }
+    .sidebar-nav a:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.03); }
+    .sidebar-nav a.active {
+      color: #fff;
+      background: rgba(255,255,255,0.05);
+      border-left-color: #c4bfb4;
+    }
+    .sidebar-nav .count {
+      margin-left: auto;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+    }
+    .sidebar-footer {
+      padding: 14px 18px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #2a322c;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 500; color: #fff;
+    }
+    .sidebar-footer .name { font-size: 13px; color: #fff; }
+    .sidebar-footer .role { font-size: 11px; color: rgba(255,255,255,0.35); }
+
+    /* MAIN */
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .topbar {
+      height: 54px;
+      background: var(--cream-soft);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+    }
+    .search-wrap { position: relative; }
+    .search-wrap svg {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      width: 14px; height: 14px; color: var(--muted);
+    }
+    .search {
+      width: 260px;
+      padding: 7px 12px 7px 32px;
+      border: 1px solid var(--line);
+      background: var(--cream);
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      outline: none;
+    }
+    .search:focus { border-color: #b5b0a4; }
+    .topbar-actions { display: flex; align-items: center; gap: 8px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 13px;
+      font-family: inherit; font-size: 12px; font-weight: 500;
+      border: 1px solid transparent; cursor: pointer;
+      text-decoration: none; transition: opacity 0.12s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn.dark { background: var(--ink); color: #fff; }
+    .btn.outline { background: transparent; color: var(--ink); border-color: var(--line); }
+    .btn.ghost { background: transparent; color: var(--muted); border: none; }
+
+    .content { flex: 1; overflow: auto; padding: 24px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* SHARED */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+    .stat-card .label {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .stat-card .value {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-title h2 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .section-title a, .section-title span {
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .section-title a:hover { color: var(--ink); }
+
+    .quick-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 24px;
+    }
+    .quick-btn {
+      padding: 6px 11px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: var(--cream-soft);
+      color: var(--ink);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .quick-btn:hover { border-color: #c4bfb4; }
+    .quick-btn span { color: var(--muted); margin-right: 3px; }
+
+    .table-card {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0,0,0,0.015);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.55); }
+    tr.clickable { cursor: pointer; }
+    code {
+      font-family: "SF Mono", ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .status {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .status.dismissed { border-color: #a8c4b0; color: #2d5a3d; }
+    .status.active { border-color: #d4c9a8; color: #7a642e; }
+    .status.draft { color: var(--muted); }
+    .status.public { border-color: #a8c4b0; color: #2d5a3d; }
+    .status.private { color: var(--muted); }
+
+    .activity {
+      margin-top: 24px;
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+    }
+    .activity-head {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tl-row {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 14px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13px;
+    }
+    .tl-row:last-child { border-bottom: none; }
+    .tl-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+    .tl-body b { font-weight: 500; display: block; margin-bottom: 1px; }
+    .tl-body span { color: var(--muted); font-size: 12px; }
+
+    /* CASE DETAIL */
+    .case-header {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 20px 22px;
+      margin-bottom: 16px;
+    }
+    .case-header .breadcrumb {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .case-header .breadcrumb a { color: var(--muted); cursor: pointer; }
+    .case-header .breadcrumb a:hover { color: var(--ink); }
+    .case-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .case-header .sub {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .case-header .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 18px;
+      overflow-x: auto;
+    }
+    .tabs button {
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tabs button:hover { color: var(--ink); }
+    .tabs button.active {
+      color: var(--ink);
+      border-bottom-color: var(--ink);
+      font-weight: 500;
+    }
+
+    .case-layout {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 18px;
+    }
+    .panel h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .field input, .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: var(--cream);
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      outline: none;
+    }
+    .field input:focus { border-color: #b5b0a4; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .section-list { list-style: none; }
+    .section-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      margin-bottom: 6px;
+      font-size: 13px;
+      background: var(--cream);
+    }
+    .section-list li .handle { color: var(--muted); cursor: grab; font-size: 12px; }
+    .section-list li .pub {
+      margin-left: auto;
+      font-size: 11px;
+      color: #2d5a3d;
+    }
+
+    .actions-panel h4 {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .actions-panel button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--ink);
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+    .actions-panel button:hover { background: rgba(0,0,0,0.03); }
+    .actions-panel hr {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 10px 0;
+    }
+    .actions-panel .danger { color: #8b3a3a; }
+
+    /* EVIDENCE */
+    .filters {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .filters button {
+      padding: 6px 11px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: var(--cream-soft);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .filters button.active {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+    .collections {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .coll-card {
+      flex-shrink: 0;
+      width: 160px;
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 12px;
+      cursor: pointer;
+    }
+    .coll-card:hover { border-color: #c4bfb4; }
+    .coll-card .t { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+    .coll-card .s { font-size: 11px; color: var(--muted); }
+    .coll-add {
+      flex-shrink: 0;
+      width: 140px;
+      border: 1px dashed var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .coll-add:hover { border-color: #c4bfb4; color: var(--ink); }
+
+    .ev-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .ev-card {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .ev-card:hover { border-color: #c4bfb4; }
+    .ev-thumb {
+      aspect-ratio: 16/10;
+      background: #e5e1d8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .ev-thumb.video { background: #1a1f1c; color: rgba(255,255,255,0.5); }
+    .ev-thumb .badge {
+      position: absolute;
+      top: 6px; left: 6px;
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      padding: 2px 5px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+    }
+    .ev-thumb .play {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ev-body { padding: 10px 12px; }
+    .ev-body .title { font-size: 12px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ev-body .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+    .help-box {
+      margin-top: 24px;
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 14px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .help-box strong { color: var(--ink); font-weight: 500; }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .case-layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">IMnexus</div>
+    <nav class="sidebar-nav">
+      <a data-view="dashboard" class="">Console</a>
+      <a data-view="case" class="active">Cases <span class="count">9</span></a>
+      <a data-view="documents" class="">Document Vault <span class="count">47</span></a>
+      <a data-view="evidence" class="">Evidence Library <span class="count">23</span></a>
+      <a data-view="dashboard" class="">Projects <span class="count">4</span></a>
+      <a data-view="dashboard" class="">Reports</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="avatar">SL</div>
+      <div>
+        <div class="name">Shane Lozenich</div>
+        <div class="role">Administrator</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div class="search-wrap">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <input class="search" type="text" placeholder="Search cases, documents, evidence…">
+      </div>
+      <div class="topbar-actions">
+        <button class="btn outline">Export</button>
+        <button class="btn dark">+ Add New</button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <div class="view" id="view-dashboard">
+        <div class="stats">
+          <div class="stat-card"><div class="label">Cases</div><div class="value">9</div></div>
+          <div class="stat-card"><div class="label">Documents</div><div class="value">47</div></div>
+          <div class="stat-card"><div class="label">Evidence Items</div><div class="value">23</div></div>
+          <div class="stat-card"><div class="label">Public Items</div><div class="value">12</div></div>
+        </div>
+
+        <div class="section-title"><h2>Quick Create</h2></div>
+        <div class="quick-row">
+          <button class="quick-btn"><span>+</span> Case</button>
+          <button class="quick-btn"><span>+</span> Event / Timeline</button>
+          <button class="quick-btn"><span>+</span> Document</button>
+          <button class="quick-btn"><span>+</span> Evidence</button>
+          <button class="quick-btn"><span>+</span> Project</button>
+          <button class="quick-btn"><span>+</span> Collection</button>
+        </div>
+
+        <div class="section-title">
+          <h2>Cases</h2>
+          <a data-view="case">View all</a>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Case No.</th>
+                <th>Caption</th>
+                <th>Court</th>
+                <th>Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="clickable" data-view="case">
+                <td><code>658931</code></td>
+                <td>The City of Seattle vs. Shane Lozenich</td>
+                <td>Seattle Municipal Court</td>
+                <td><span class="status dismissed">Dismissed</span></td>
+                <td style="color:var(--muted)">2 days ago</td>
+              </tr>
+              <tr class="clickable">
+                <td><code>712044</code></td>
+                <td>Case No. 712044 — Placeholder</td>
+                <td>—</td>
+                <td><span class="status active">Active</span></td>
+                <td style="color:var(--muted)">5 days ago</td>
+              </tr>
+              <tr class="clickable">
+                <td><code>689102</code></td>
+                <td>Case No. 689102 — Placeholder</td>
+                <td>—</td>
+                <td><span class="status draft">Draft</span></td>
+                <td style="color:var(--muted)">1 week ago</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="activity">
+          <div class="activity-head">Recent activity</div>
+          <div class="tl-row"><div class="tl-time">14:22</div><div class="tl-body"><b>Public report updated</b><span>Case 658931 · Full dossier sections refreshed</span></div></div>
+          <div class="tl-row"><div class="tl-time">11:04</div><div class="tl-body"><b>Evidence added</b><span>3 images linked to Arrest Sequence collection</span></div></div>
+          <div class="tl-row"><div class="tl-time">09:30</div><div class="tl-body"><b>Document uploaded</b><span>Petition for Order for Protection · linked to 658931</span></div></div>
+        </div>
+      </div>
+
+      <!-- ===================== CASE DETAIL ===================== -->
+      <div class="view active" id="view-case">
+        <div class="case-header">
+          <div class="breadcrumb">
+            <a data-view="dashboard">Cases</a> / <span>658931</span>
+          </div>
+          <h1>The City of Seattle vs. Shane Lozenich</h1>
+          <div class="sub">
+            Case No. <code>658931</code> · Seattle Municipal Court · Judge Catherine McDowall
+            <span class="status dismissed" style="margin-left:8px;">Dismissed — No Complaint Filed</span>
+          </div>
+          <div class="actions">
+            <button class="btn outline">Preview Public</button>
+            <button class="btn outline">Export PDF</button>
+            <button class="btn dark">Save</button>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="active">Overview</button>
+          <button>Timeline</button>
+          <button>Actors</button>
+          <button>Narrative Sections</button>
+          <button>Documents</button>
+          <button data-view="evidence">Evidence</button>
+          <button>Public Settings</button>
+        </div>
+
+        <div class="case-layout">
+          <div>
+            <div class="panel" style="margin-bottom:14px;">
+              <h3>Case Metadata</h3>
+              <div class="grid-2">
+                <div class="field">
+                  <label>Case Number</label>
+                  <input type="text" value="658931">
+                </div>
+                <div class="field">
+                  <label>Jurisdiction / Court</label>
+                  <input type="text" value="Seattle Municipal Court">
+                </div>
+                <div class="field">
+                  <label>Presiding Judge</label>
+                  <input type="text" value="Judge Catherine McDowall">
+                </div>
+                <div class="field">
+                  <label>Alleged Cause / Charge</label>
+                  <input type="text" value="Violation of Domestic Violence No-Contact Order">
+                </div>
+                <div class="field">
+                  <label>Arrest / Incarceration Dates</label>
+                  <input type="text" value="03/07/2021 – 03/08/2021 (Approx. 24 hours)">
+                </div>
+                <div class="field">
+                  <label>Official Closure Date</label>
+                  <input type="text" value="06/12/2021">
+                </div>
+              </div>
+              <div class="field">
+                <label>Final Disposition / Status</label>
+                <input type="text" value="Dismissed Without Prejudice — No Criminal Complaint Filed">
+              </div>
+            </div>
+
+            <div class="panel">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="margin:0;">Report Sections</h3>
+                <button class="btn outline" style="padding:4px 10px;font-size:11px;">+ Add Section</button>
+              </div>
+              <ul class="section-list">
+                <li><span class="handle">⠿</span> 01. Executive Summary &amp; Procedural Collapse <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 02. Key Actors, Institutional Entities &amp; Counsel Matrix <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 03. Macro-Environmental &amp; Contextual Origins <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 04. Chronological Timeline of Events <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 05. Case Narrative &amp; Defendant's First-Person Account <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 06. Stratigraphic Procedural &amp; Institutional Analysis <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 07. Evidentiary Record, Chain of Custody &amp; Anomalies <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 08. Constitutional &amp; Statutory Violations Matrix <span class="pub">Published</span></li>
+                <li><span class="handle">⠿</span> 09–12. Additional template sections… <span class="pub">Published</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="panel actions-panel">
+            <h4>Actions</h4>
+            <button>Update Case</button>
+            <button>Export PDF Report</button>
+            <button>Preview Public Page</button>
+            <button>Publish / Unpublish</button>
+            <hr>
+            <button>+ Add Timeline Event</button>
+            <button>+ Upload Document</button>
+            <button data-view="evidence">+ Add Evidence</button>
+            <hr>
+            <button class="danger">Delete Case</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== EVIDENCE ===================== -->
+      <div class="view" id="view-evidence">
+        <div class="section-title" style="margin-bottom:16px;">
+          <h2 style="font-size:16px;">Evidence Library</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn outline">New Collection</button>
+            <button class="btn dark">+ Add Evidence</button>
+          </div>
+        </div>
+
+        <div class="filters">
+          <button class="active">All Items</button>
+          <button>Collections</button>
+          <button>Linked to Cases</button>
+          <button>Standalone</button>
+          <button>Public</button>
+        </div>
+
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Collections</div>
+        <div class="collections">
+          <div class="coll-card">
+            <div class="t">Arrest Sequence – Mar 7</div>
+            <div class="s">6 items · Linked to 658931</div>
+          </div>
+          <div class="coll-card">
+            <div class="t">Digital Stalking Artifacts</div>
+            <div class="s">9 items · Mixed linkage</div>
+          </div>
+          <div class="coll-card">
+            <div class="t">Neighbor Incident</div>
+            <div class="s">4 items · Standalone</div>
+          </div>
+          <div class="coll-add">+ New Collection</div>
+        </div>
+
+        <div class="ev-grid">
+          <div class="ev-card">
+            <div class="ev-thumb"><span class="badge">IMAGE</span>[Image Preview]</div>
+            <div class="ev-body">
+              <div class="title">Bedroom entry – officer approach</div>
+              <div class="meta"><code>658931</code> <span class="status public">Public</span></div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-thumb video">
+              <span class="badge">VIDEO</span>
+              <div class="play">▶</div>
+            </div>
+            <div class="ev-body">
+              <div class="title">Body-cam excerpt (redacted)</div>
+              <div class="meta"><code>658931</code> <span class="status private">Private</span></div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-thumb" style="background:#efece4;"><span class="badge">FILE</span>PDF</div>
+            <div class="ev-body">
+              <div class="title">CAD log excerpt – 911 calls</div>
+              <div class="meta"><span>Standalone</span> <span class="status private">Private</span></div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-thumb" style="background:#f0ebe0;align-items:flex-start;padding:10px;">
+              <span class="badge">TEXT</span>
+              <div style="margin-top:18px;font-size:10px;line-height:1.4;color:var(--muted);">Contemporaneous note: Officers entered bedroom without announcing…</div>
+            </div>
+            <div class="ev-body">
+              <div class="title">Personal observation log – Mar 7</div>
+              <div class="meta"><code>658931</code> <span class="status public">Public</span></div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-thumb"><span class="badge">IMAGE</span>[Image Preview]</div>
+            <div class="ev-body">
+              <div class="title">AV / frequency equipment</div>
+              <div class="meta"><span>Standalone</span> <span class="status private">Private</span></div>
+            </div>
+          </div>
+          <div class="ev-card" style="border-style:dashed;display:flex;align-items:center;justify-content:center;min-height:160px;color:var(--muted);font-size:13px;">
+            + Add Evidence
+          </div>
+        </div>
+
+        <div class="help-box">
+          <strong>How Evidence works</strong><br>
+          Each item can be a file, image, video, or text note. Items can be linked to a case or left standalone. Group items into Collections. Toggle any item (or collection) between Private and Public — only Public items appear on the public archive.
+        </div>
+      </div>
+
+      <!-- ===================== DOCUMENTS (simple) ===================== -->
+      <div class="view" id="view-documents">
+        <div class="section-title" style="margin-bottom:16px;">
+          <h2 style="font-size:16px;">Document Vault</h2>
+          <button class="btn dark">+ Upload Documents</button>
+        </div>
+        <div class="filters">
+          <button class="active">All Documents</button>
+          <button>Linked to Cases</button>
+          <button>Unlinked</button>
+          <button>Public</button>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Linked Case</th>
+                <th>Visibility</th>
+                <th>Uploaded</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><strong style="font-weight:500;">Petition for Order for Protection</strong></td>
+                <td>Court Filing</td>
+                <td><code>658931</code></td>
+                <td><span class="status public">Public</span></td>
+                <td style="color:var(--muted)">May 2021</td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><strong style="font-weight:500;">Letter from WA State Auditor's Office</strong></td>
+                <td>Official Notice</td>
+                <td><code>658931</code></td>
+                <td><span class="status private">Private</span></td>
+                <td style="color:var(--muted)">Early 2021</td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><strong style="font-weight:500;">Case View — 658931 (Docket Summary)</strong></td>
+                <td>Court Record</td>
+                <td><code>658931</code></td>
+                <td><span class="status public">Public</span></td>
+                <td style="color:var(--muted)">Jun 2021</td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><strong style="font-weight:500;">Email thread — 911 follow-up attempts</strong></td>
+                <td>Correspondence</td>
+                <td style="color:var(--muted)">— Unlinked</td>
+                <td><span class="status private">Private</span></td>
+                <td style="color:var(--muted)">Mar 2021</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function showView(id) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      const el = document.getElementById('view-' + id);
+      if (el) el.classList.add('active');
+      document.querySelectorAll('.sidebar-nav a').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('data-view') === id);
+      });
+    }
+    document.querySelectorAll('[data-view]').forEach(el => {
+      el.addEventListener('click', e => {
+        e.preventDefault();
+        const v = el.getAttribute('data-view');
+        if (v) showView(v);
+      });
+    });
+  </script>
+
+
+</body></html>

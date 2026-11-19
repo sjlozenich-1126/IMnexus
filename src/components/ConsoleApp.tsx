@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  Network,
   Plus,
   Search,
   Shield,
@@ -37,9 +38,11 @@ import type {
   VaultItem,
 } from '../types';
 import { exportCasesPortfolioCsv } from '../utils/exportReports';
+import { buildPortfolioNexus } from '../utils/nexusEngine';
 import { AccessRolesView } from './AccessRolesView';
 import { BrandMark, StatusLabel } from './BrandMark';
 import { CaseWorkspace } from './CaseWorkspace';
+import { NexusMapView } from './NexusMapView';
 import { ReportsAnalyticsView } from './ReportsAnalyticsView';
 import { VaultAndEvidenceView } from './VaultAndEvidenceView';
 
@@ -50,6 +53,7 @@ export type ConsoleView =
   | 'case_detail'
   | 'documents'
   | 'evidence'
+  | 'nexus'
   | 'reports'
   | 'roles';
 
@@ -106,7 +110,6 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
   useEffect(() => {
     const unsubCases = subscribeCases(firebaseUser, userProfile.role, (list) => {
       setCases(list);
-      // Claim invited cases automatically
       list.forEach((c) => {
         if (
           firebaseUser.email &&
@@ -153,12 +156,16 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
     [vaultItems, cases]
   );
 
+  const portfolioNexusGraph = useMemo(
+    () => buildPortfolioNexus({ cases, vaultItems, collections }),
+    [cases, vaultItems, collections]
+  );
+
   const selectedCase = useMemo(
     () => cases.find((c) => c.id === selectedCaseId) || null,
     [cases, selectedCaseId]
   );
 
-  // Global Index Search Results
   const globalSearchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return { cases: [], vault: [], collections: [] };
@@ -252,46 +259,47 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
     icon: React.ReactNode;
     count?: number;
   }> = [
-    { id: 'dashboard', label: 'Console', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'cases', label: 'Cases', icon: <FileText className="w-4 h-4" />, count: cases.length },
-    { id: 'documents', label: 'Document Vault', icon: <HardDrive className="w-4 h-4" />, count: docCount },
-    { id: 'evidence', label: 'Evidence Library', icon: <FolderKanban className="w-4 h-4" />, count: evidenceCount },
-    { id: 'projects', label: 'Projects', icon: <Globe className="w-4 h-4" />, count: projectCount },
-    { id: 'reports', label: 'Reports', icon: <BarChart3 className="w-4 h-4" /> },
-    { id: 'roles', label: 'Access & Roles', icon: <Shield className="w-4 h-4" /> },
+    { id: 'dashboard', label: 'Console', icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
+    { id: 'cases', label: 'Cases', icon: <FileText className="w-3.5 h-3.5" />, count: cases.length },
+    { id: 'documents', label: 'Document Vault', icon: <HardDrive className="w-3.5 h-3.5" />, count: docCount },
+    { id: 'evidence', label: 'Evidence Library', icon: <FolderKanban className="w-3.5 h-3.5" />, count: evidenceCount },
+    { id: 'projects', label: 'Projects', icon: <Globe className="w-3.5 h-3.5" />, count: projectCount },
+    { id: 'nexus', label: 'Nexus Map', icon: <Network className="w-3.5 h-3.5" />, count: portfolioNexusGraph.edges.length },
+    { id: 'reports', label: 'Reports', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+    { id: 'roles', label: 'Access & Roles', icon: <Shield className="w-3.5 h-3.5" /> },
   ];
 
   const displayedCases =
     view === 'projects' ? cases.filter((c) => c.caseType === 'project') : cases;
 
   return (
-    <div className="min-h-screen flex bg-[#f4f4f5] dark:bg-[#09090b] text-zinc-950 dark:text-zinc-100">
+    <div className="min-h-screen flex bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#0f1210] dark:text-[#f3f0e9]">
       {/* Mobile Sidebar Backdrop */}
       {mobileNavOpen && (
         <div
           onClick={() => setMobileNavOpen(false)}
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/55 lg:hidden"
         />
       )}
 
-      {/* Left Sidebar (Cobalt #3061d0 matching prototype) */}
+      {/* Left Sidebar (#111413 obsidian matching design spec) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[232px] bg-[#3061d0] dark:bg-[#111827] text-white/70 flex flex-col transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[214px] bg-[#111413] text-white/60 flex flex-col shrink-0 border-r border-white/[0.06] transition-transform duration-200 lg:static lg:translate-x-0 ${
           mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="h-14 px-5 flex items-center justify-between border-b border-white/10">
-          <BrandMark className="text-[15px] text-white" />
+        <div className="h-[54px] px-[18px] flex items-center justify-between border-b border-white/[0.06]">
+          <BrandMark className="text-[12px] text-white" />
           <button
             type="button"
             onClick={() => setMobileNavOpen(false)}
-            className="lg:hidden p-1 text-white/70 hover:text-white"
+            className="lg:hidden p-1 text-white/60 hover:text-white cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <nav className="flex-1 py-3 overflow-y-auto">
+        <nav className="flex-1 py-2.5 overflow-y-auto">
           {navItems.map((item) => {
             const isActive =
               view === item.id || (view === 'case_detail' && item.id === 'cases');
@@ -303,16 +311,16 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                   setView(item.id);
                   setMobileNavOpen(false);
                 }}
-                className={`w-full flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium border-l-2 transition-colors cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-[18px] py-[9px] text-[13px] border-l-2 transition-colors cursor-pointer ${
                   isActive
-                    ? 'text-white bg-white/10 border-white font-semibold'
-                    : 'text-white/65 border-transparent hover:text-white hover:bg-white/5'
+                    ? 'text-white bg-white/[0.05] border-[#c4bfb4] font-medium'
+                    : 'text-white/50 border-transparent hover:text-white/90 hover:bg-white/[0.03]'
                 }`}
               >
                 {item.icon}
                 <span className="truncate">{item.label}</span>
                 {item.count !== undefined && (
-                  <span className="ml-auto text-[11px] font-mono-tabular text-white/50">
+                  <span className="ml-auto text-[11px] font-mono-tabular text-white/30">
                     {item.count}
                   </span>
                 )}
@@ -320,11 +328,11 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             );
           })}
 
-          <div className="mt-4 pt-4 border-t border-white/10 px-5">
+          <div className="mt-4 pt-4 border-t border-white/[0.06] px-[18px]">
             <button
               type="button"
               onClick={onOpenPublicArchive}
-              className="w-full flex items-center justify-between py-2 text-xs font-semibold text-white/80 hover:text-white cursor-pointer"
+              className="w-full flex items-center justify-between py-2 text-xs font-medium text-white/70 hover:text-white cursor-pointer"
             >
               <span>Public Archive Site</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -333,21 +341,21 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-white/10 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-[#22479c] dark:bg-[#3061d0] flex items-center justify-center text-xs font-bold text-white shrink-0">
+        <div className="px-[18px] py-3.5 border-t border-white/[0.06] flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-[#2a322c] flex items-center justify-center text-[11px] font-medium text-white shrink-0">
             {initials || 'IM'}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold text-white truncate">
+            <div className="text-[13px] text-white truncate leading-tight">
               {userProfile.displayName}
             </div>
-            <div className="text-[11px] text-white/55 capitalize">{userProfile.role}</div>
+            <div className="text-[11px] text-white/35 capitalize">{userProfile.role}</div>
           </div>
           <button
             type="button"
             onClick={() => void signOut(auth)}
             title="Sign out"
-            className="p-1.5 rounded hover:bg-white/10 text-white/70 hover:text-white cursor-pointer"
+            className="p-1.5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
@@ -357,43 +365,43 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
       {/* Main Content Shell */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="h-14 bg-white dark:bg-[#0f1014] border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 flex items-center justify-between gap-4 shrink-0">
+        <header className="h-[54px] bg-[#faf8f4] dark:bg-[#111413] border-b border-[#ddd8ce] dark:border-[#262b27] px-4 sm:px-6 flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 flex-1 max-w-md relative">
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
               aria-label="Open navigation"
-              className="lg:hidden p-2 rounded-md border border-zinc-200 dark:border-zinc-800"
+              className="lg:hidden p-2 border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#161916] cursor-pointer"
             >
               <Menu className="w-4 h-4" />
             </button>
 
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[#6a716b] absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Global index: search cases, documents, evidence, tags..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm bg-[#f4f4f5] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md outline-none focus:border-[#3061d0]"
+                placeholder="Search cases, documents, evidence…"
+                className="w-full pl-8 pr-3 py-[6px] text-[13px] bg-[#f3f0e9] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] text-[#0f1210] dark:text-[#f3f0e9] placeholder-[#6a716b] outline-none focus:border-[#b5b0a4] dark:focus:border-[#6a716b]"
               />
 
               {/* Global Index Search Dropdown */}
               {searchFocused && searchQuery.trim().length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg max-h-80 overflow-y-auto p-2 space-y-2">
+                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] shadow-lg max-h-80 overflow-y-auto p-2 space-y-2">
                   {globalSearchResults.cases.length === 0 &&
                   globalSearchResults.vault.length === 0 &&
                   globalSearchResults.collections.length === 0 ? (
-                    <div className="p-3 text-xs text-zinc-500">
+                    <div className="p-3 text-xs text-[#6a716b]">
                       No indexed cases, documents, or evidence matched &ldquo;{searchQuery}&rdquo;.
                     </div>
                   ) : (
                     <>
                       {globalSearchResults.cases.length > 0 && (
                         <div>
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b]">
                             Cases &amp; Projects
                           </div>
                           {globalSearchResults.cases.map((c) => (
@@ -401,10 +409,10 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                               key={c.id}
                               type="button"
                               onMouseDown={() => openCase(c.id)}
-                              className="w-full text-left px-2.5 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs flex items-center justify-between gap-2 cursor-pointer"
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-[#f3f0e9] dark:hover:bg-[#1f2420] text-xs flex items-center justify-between gap-2 cursor-pointer"
                             >
-                              <span className="font-semibold truncate">{c.title}</span>
-                              <span className="font-mono-tabular text-zinc-400 shrink-0">
+                              <span className="font-medium truncate">{c.title}</span>
+                              <span className="font-mono-tabular text-[#6a716b] shrink-0">
                                 {c.caseNumber}
                               </span>
                             </button>
@@ -413,7 +421,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                       )}
                       {globalSearchResults.vault.length > 0 && (
                         <div>
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b]">
                             Documents &amp; Evidence
                           </div>
                           {globalSearchResults.vault.map((v) => (
@@ -424,10 +432,10 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                                 setView(v.category === 'document' ? 'documents' : 'evidence');
                                 setSearchFocused(false);
                               }}
-                              className="w-full text-left px-2.5 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs flex items-center justify-between gap-2 cursor-pointer"
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-[#f3f0e9] dark:hover:bg-[#1f2420] text-xs flex items-center justify-between gap-2 cursor-pointer"
                             >
-                              <span className="font-semibold truncate">{v.title}</span>
-                              <span className="font-mono-tabular uppercase text-[10px] text-zinc-400 shrink-0">
+                              <span className="font-medium truncate">{v.title}</span>
+                              <span className="font-mono-tabular uppercase text-[10px] text-[#6a716b] shrink-0">
                                 {v.mediaType}
                               </span>
                             </button>
@@ -436,7 +444,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                       )}
                       {globalSearchResults.collections.length > 0 && (
                         <div>
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b]">
                             Collections
                           </div>
                           {globalSearchResults.collections.map((col) => (
@@ -447,10 +455,10 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                                 setView('evidence');
                                 setSearchFocused(false);
                               }}
-                              className="w-full text-left px-2.5 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs flex items-center justify-between gap-2 cursor-pointer"
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-[#f3f0e9] dark:hover:bg-[#1f2420] text-xs flex items-center justify-between gap-2 cursor-pointer"
                             >
-                              <span className="font-semibold truncate">{col.title}</span>
-                              <span className="text-[10px] text-zinc-400 shrink-0">
+                              <span className="font-medium truncate">{col.title}</span>
+                              <span className="text-[10px] text-[#6a716b] shrink-0">
                                 {col.itemIds.length} items
                               </span>
                             </button>
@@ -468,26 +476,27 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             <button
               type="button"
               onClick={onToggleDarkMode}
-              aria-label="Toggle dark mode"
-              className="p-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+              aria-label="Toggle color theme"
+              className="inline-flex items-center gap-1.5 px-2.5 py-[6px] text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent text-[#0f1210] dark:text-[#f3f0e9] hover:border-[#0f1210] dark:hover:border-[#8d948e] cursor-pointer"
             >
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{darkMode ? 'Light' : 'Dark'}</span>
             </button>
 
             <button
               type="button"
               onClick={() => exportCasesPortfolioCsv(cases, vaultItems, collections)}
               disabled={cases.length === 0}
-              className="hidden sm:inline-flex px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              className="hidden sm:inline-flex px-3 py-[6px] text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent text-[#0f1210] dark:text-[#f3f0e9] hover:border-[#0f1210] disabled:opacity-45 cursor-pointer whitespace-nowrap"
             >
-              Export CSV
+              Export
             </button>
 
             {canCreate && (
               <button
                 type="button"
                 onClick={() => openNewCaseModal('legal')}
-                className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-1 px-3.5 py-[6px] text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add New</span>
@@ -497,74 +506,91 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
         </header>
 
         {/* Scrollable Workspace Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-7">
+        <main className="flex-1 overflow-y-auto p-5 sm:p-6">
           {view === 'dashboard' && (
-            <div className="space-y-7 max-w-6xl">
+            <div className="space-y-6 max-w-6xl">
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-                    Cases &amp; Projects
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-[18px] py-4">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
+                    Cases
                   </div>
-                  <div className="text-3xl font-bold tabular-nums">{cases.length}</div>
+                  <div className="text-2xl font-semibold tracking-[-0.02em] font-mono-tabular">
+                    {cases.length}
+                  </div>
                 </div>
-                <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
+                <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-[18px] py-4">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
                     Documents
                   </div>
-                  <div className="text-3xl font-bold tabular-nums">{docCount}</div>
+                  <div className="text-2xl font-semibold tracking-[-0.02em] font-mono-tabular">
+                    {docCount}
+                  </div>
                 </div>
-                <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
+                <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-[18px] py-4">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
                     Evidence Items
                   </div>
-                  <div className="text-3xl font-bold tabular-nums">{evidenceCount}</div>
-                </div>
-                <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-                    Public Items &amp; Sites
+                  <div className="text-2xl font-semibold tracking-[-0.02em] font-mono-tabular">
+                    {evidenceCount}
                   </div>
-                  <div className="text-3xl font-bold tabular-nums">{publicItemsCount}</div>
+                </div>
+                <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-[18px] py-4">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
+                    Public Items
+                  </div>
+                  <div className="text-2xl font-semibold tracking-[-0.02em] font-mono-tabular">
+                    {publicItemsCount}
+                  </div>
                 </div>
               </div>
 
               {/* Quick Create */}
               {canCreate && (
                 <div>
-                  <h2 className="text-sm font-bold mb-2.5">Quick Create</h2>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex items-baseline justify-between mb-2.5">
+                    <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Quick Create</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-[7px]">
                     <button
                       type="button"
                       onClick={() => openNewCaseModal('legal')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#141418] hover:border-[#3061d0] cursor-pointer"
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
                     >
-                      <span className="text-zinc-400 font-bold mr-1">+</span> Case
+                      <span className="text-[#6a716b] mr-1">+</span> Case
                     </button>
                     <button
                       type="button"
                       onClick={() => openNewCaseModal('project')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#141418] hover:border-[#3061d0] cursor-pointer"
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
                     >
-                      <span className="text-zinc-400 font-bold mr-1">+</span> Project Site
+                      <span className="text-[#6a716b] mr-1">+</span> Project Site
                     </button>
                     <button
                       type="button"
                       onClick={() => setView('documents')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#141418] hover:border-[#3061d0] cursor-pointer"
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
                     >
-                      <span className="text-zinc-400 font-bold mr-1">+</span> Document
+                      <span className="text-[#6a716b] mr-1">+</span> Document
                     </button>
                     <button
                       type="button"
                       onClick={() => setView('evidence')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#141418] hover:border-[#3061d0] cursor-pointer"
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
                     >
-                      <span className="text-zinc-400 font-bold mr-1">+</span> Evidence / Collection
+                      <span className="text-[#6a716b] mr-1">+</span> Evidence / Collection
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView('nexus')}
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
+                    >
+                      Explore Nexus Map →
                     </button>
                     <button
                       type="button"
                       onClick={() => setView('reports')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#141418] hover:border-[#3061d0] cursor-pointer"
+                      className="px-[11px] py-[6px] text-xs border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] hover:border-[#c4bfb4] dark:hover:border-[#6a716b] cursor-pointer"
                     >
                       Custom Report
                     </button>
@@ -572,31 +598,68 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 </div>
               )}
 
+              {/* Portfolio Nexus Insights Strip */}
+              {cases.length > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between mb-2.5">
+                    <h2 className="text-[14px] font-semibold tracking-[-0.01em] flex items-center gap-1.5">
+                      <Network className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
+                      <span>Nexus Connections &amp; Pattern Insights</span>
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setView('nexus')}
+                      className="text-xs text-[#6a716b] hover:text-[#0f1210] dark:hover:text-[#f3f0e9] cursor-pointer"
+                    >
+                      Open Visual Diagram ({portfolioNexusGraph.edges.length} links) →
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {portfolioNexusGraph.insights.map((ins) => (
+                      <button
+                        key={ins.id}
+                        type="button"
+                        onClick={() => setView('nexus')}
+                        className="text-left bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-3.5 hover:border-[#0f1210] dark:hover:border-[#8d948e] transition-colors cursor-pointer"
+                      >
+                        <div className="text-[10px] uppercase tracking-[0.1em] text-[#2d5a3d] dark:text-[#7fb892] mb-1">
+                          {ins.category}
+                        </div>
+                        <div className="text-xs font-semibold mb-1">{ins.title}</div>
+                        <p className="text-[11px] text-[#6a716b] dark:text-[#8d948e] leading-relaxed">
+                          {ins.detail}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Cases Table */}
               <div>
                 <div className="flex items-baseline justify-between mb-2.5">
-                  <h2 className="text-sm font-bold">Cases &amp; Public Sites</h2>
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Cases</h2>
                   <button
                     type="button"
                     onClick={() => setView('cases')}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-white cursor-pointer"
+                    className="text-xs text-[#6a716b] hover:text-[#0f1210] dark:hover:text-[#f3f0e9] cursor-pointer"
                   >
                     View all
                   </button>
                 </div>
 
-                <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
+                <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] overflow-x-auto">
                   {cases.length === 0 ? (
                     <div className="p-10 text-center space-y-3">
-                      <h3 className="text-base font-bold">Create your first IMnexus Case or Project</h3>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
-                        Input structured metadata, attach encrypted documents and evidence collections, export PDF/CSV reports, and publish to a dedicated public URL.
+                      <h3 className="text-sm font-semibold">Create your first IMnexus Case or Project</h3>
+                      <p className="text-xs text-[#6a716b] dark:text-[#8d948e] max-w-md mx-auto">
+                        Input structured metadata, attach encrypted documents and evidence collections, inspect Nexus connections, export PDF/CSV reports, and publish a public site URL.
                       </p>
                       {canCreate && (
                         <button
                           type="button"
                           onClick={() => openNewCaseModal('legal')}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Create First Case</span>
@@ -604,36 +667,36 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                       )}
                     </div>
                   ) : (
-                    <table className="w-full text-left text-xs sm:text-sm border-collapse">
+                    <table className="w-full text-left text-[13px] border-collapse">
                       <thead>
-                        <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                          <th className="py-3 px-4">Case No.</th>
-                          <th className="py-3 px-4">Caption</th>
-                          <th className="py-3 px-4">Court / Entity</th>
-                          <th className="py-3 px-4">Status</th>
-                          <th className="py-3 px-4">Public Site</th>
+                        <tr className="border-b border-[#ddd8ce] dark:border-[#262b27] bg-black/[0.015] dark:bg-white/[0.02] text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e]">
+                          <th className="py-2.5 px-3.5">Case No.</th>
+                          <th className="py-2.5 px-3.5">Caption</th>
+                          <th className="py-2.5 px-3.5">Court / Entity</th>
+                          <th className="py-2.5 px-3.5">Status</th>
+                          <th className="py-2.5 px-3.5">Public Site</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                      <tbody className="divide-y divide-[#e9e5db] dark:divide-[#222723]">
                         {cases.slice(0, 8).map((c) => (
                           <tr
                             key={c.id}
                             onClick={() => openCase(c.id)}
-                            className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 cursor-pointer"
+                            className="hover:bg-white/60 dark:hover:bg-white/[0.03] cursor-pointer"
                           >
-                            <td className="py-3 px-4 font-mono-tabular text-xs text-zinc-500">
+                            <td className="py-2.5 px-3.5 font-mono-tabular text-[11px] text-[#6a716b]">
                               {c.caseNumber}
                             </td>
-                            <td className="py-3 px-4 font-semibold text-zinc-950 dark:text-white">
+                            <td className="py-2.5 px-3.5 font-medium text-[#0f1210] dark:text-[#f3f0e9]">
                               {c.title}
                             </td>
-                            <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">
+                            <td className="py-2.5 px-3.5 text-[#6a716b] dark:text-[#8d948e]">
                               {c.court || '—'}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-2.5 px-3.5">
                               <StatusLabel status={c.status} />
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-2.5 px-3.5">
                               {c.isPublished ? (
                                 <button
                                   type="button"
@@ -641,13 +704,13 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                                     e.stopPropagation();
                                     onOpenPublicSite(c.publicSlug);
                                   }}
-                                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#3061d0] dark:text-blue-400 hover:underline cursor-pointer"
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-[#2d5a3d] dark:text-[#7fb892] hover:underline cursor-pointer"
                                 >
                                   <span>/site/{c.publicSlug}</span>
                                   <ExternalLink className="w-3 h-3" />
                                 </button>
                               ) : (
-                                <span className="text-xs text-zinc-400">Private</span>
+                                <span className="text-xs text-[#6a716b]">Private</span>
                               )}
                             </td>
                           </tr>
@@ -659,25 +722,25 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
               </div>
 
               {/* Recent Activity */}
-              <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold">
-                  Recent Activity
+              <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]">
+                <div className="px-3.5 py-2.5 border-b border-[#ddd8ce] dark:border-[#262b27] text-[13px] font-semibold">
+                  Recent activity
                 </div>
                 {activityLogs.length === 0 ? (
-                  <div className="p-5 text-xs text-zinc-500">
+                  <div className="p-4 text-xs text-[#6a716b]">
                     Activity logs will appear here as you create cases, upload encrypted items, and publish public sites.
                   </div>
                 ) : (
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <div className="divide-y divide-[#e9e5db] dark:divide-[#222723]">
                     {activityLogs.slice(0, 8).map((log) => (
-                      <div key={log.id} className="px-4 py-3 flex items-start justify-between gap-4 text-xs">
+                      <div key={log.id} className="px-3.5 py-2.5 flex items-start justify-between gap-4 text-[13px]">
                         <div>
-                          <div className="font-semibold text-zinc-950 dark:text-white">
+                          <div className="font-medium text-[#0f1210] dark:text-[#f3f0e9]">
                             {log.title}
                           </div>
-                          <div className="text-zinc-500 dark:text-zinc-400">{log.detail}</div>
+                          <div className="text-xs text-[#6a716b] dark:text-[#8d948e]">{log.detail}</div>
                         </div>
-                        <div className="text-[11px] text-zinc-400 shrink-0">{log.actorName}</div>
+                        <div className="text-[11px] text-[#6a716b] font-mono-tabular shrink-0">{log.actorName}</div>
                       </div>
                     ))}
                   </div>
@@ -690,18 +753,18 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             <div className="space-y-5 max-w-6xl">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight">
+                  <h1 className="text-lg font-semibold tracking-[-0.02em]">
                     {view === 'projects' ? 'Project Sites' : 'Cases & Dossiers'}
                   </h1>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    Select any workspace to edit metadata, add timeline/actors, export reports, or publish its public site URL.
+                  <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-1">
+                    Select any workspace to edit metadata, explore its Nexus map, add timeline/actors, export reports, or publish its public site URL.
                   </p>
                 </div>
                 {canCreate && (
                   <button
                     type="button"
                     onClick={() => openNewCaseModal(view === 'projects' ? 'project' : 'legal')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>{view === 'projects' ? 'New Project' : 'New Case'}</span>
@@ -709,44 +772,44 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 )}
               </div>
 
-              <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
+              <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] overflow-x-auto">
                 {displayedCases.length === 0 ? (
-                  <div className="p-10 text-center text-xs text-zinc-500">
+                  <div className="p-10 text-center text-xs text-[#6a716b]">
                     No {view === 'projects' ? 'projects' : 'cases'} found. Click New to create one.
                   </div>
                 ) : (
-                  <table className="w-full text-left text-xs sm:text-sm border-collapse">
+                  <table className="w-full text-left text-[13px] border-collapse">
                     <thead>
-                      <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                        <th className="py-3 px-4">Case No.</th>
-                        <th className="py-3 px-4">Caption</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Public URL</th>
+                      <tr className="border-b border-[#ddd8ce] dark:border-[#262b27] bg-black/[0.015] dark:bg-white/[0.02] text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b]">
+                        <th className="py-2.5 px-3.5">Case No.</th>
+                        <th className="py-2.5 px-3.5">Caption</th>
+                        <th className="py-2.5 px-3.5">Type</th>
+                        <th className="py-2.5 px-3.5">Status</th>
+                        <th className="py-2.5 px-3.5">Public URL</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    <tbody className="divide-y divide-[#e9e5db] dark:divide-[#222723]">
                       {displayedCases.map((c) => (
                         <tr
                           key={c.id}
                           onClick={() => openCase(c.id)}
-                          className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 cursor-pointer"
+                          className="hover:bg-white/60 dark:hover:bg-white/[0.03] cursor-pointer"
                         >
-                          <td className="py-3 px-4 font-mono-tabular text-xs text-zinc-500">
+                          <td className="py-2.5 px-3.5 font-mono-tabular text-[11px] text-[#6a716b]">
                             {c.caseNumber}
                           </td>
-                          <td className="py-3 px-4 font-semibold">{c.title}</td>
-                          <td className="py-3 px-4 capitalize text-zinc-500">{c.caseType}</td>
-                          <td className="py-3 px-4">
+                          <td className="py-2.5 px-3.5 font-medium">{c.title}</td>
+                          <td className="py-2.5 px-3.5 capitalize text-[#6a716b]">{c.caseType}</td>
+                          <td className="py-2.5 px-3.5">
                             <StatusLabel status={c.status} />
                           </td>
-                          <td className="py-3 px-4 font-mono-tabular text-xs">
+                          <td className="py-2.5 px-3.5 font-mono-tabular text-xs">
                             {c.isPublished ? (
-                              <span className="text-[#3061d0] dark:text-blue-400">
+                              <span className="text-[#2d5a3d] dark:text-[#7fb892]">
                                 /site/{c.publicSlug}
                               </span>
                             ) : (
-                              <span className="text-zinc-400">Draft</span>
+                              <span className="text-[#6a716b]">Draft</span>
                             )}
                           </td>
                         </tr>
@@ -806,6 +869,28 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             </div>
           )}
 
+          {view === 'nexus' && (
+            <div className="space-y-5 max-w-6xl">
+              <div>
+                <h1 className="text-lg font-semibold tracking-[-0.02em]">
+                  IMnexus Portfolio Connection Map
+                </h1>
+                <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5">
+                  Interactive diagram mapping structural and semantic patterns across your cases, jurisdictions, curated collections, shared #tags, and vault items.
+                </p>
+              </div>
+              <NexusMapView
+                graph={portfolioNexusGraph}
+                subtitle="Click any node or insight card to inspect linked records, or jump directly into a case workspace."
+                onSelectCaseId={openCase}
+                onInspectNodeArtifact={(node) => {
+                  if (node.kind === 'document') setView('documents');
+                  else if (node.kind === 'evidence') setView('evidence');
+                }}
+              />
+            </div>
+          )}
+
           {view === 'reports' && (
             <div className="max-w-6xl">
               <ReportsAnalyticsView
@@ -830,13 +915,13 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
       {/* Create New Case / Project Modal */}
       {showNewCaseModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <h2 className="text-base font-bold">Create Case / Project Site</h2>
+          <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-5 py-3.5 border-b border-[#ddd8ce] dark:border-[#262b27] flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Create Case / Project Site</h2>
               <button
                 type="button"
                 onClick={() => setShowNewCaseModal(false)}
-                className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                className="p-1 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -845,7 +930,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             <form onSubmit={handleCreateCase} className="p-5 space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Case / Project No. *
                   </label>
                   <input
@@ -853,17 +938,17 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                     required
                     value={newCaseNumber}
                     onChange={(e) => setNewCaseNumber(e.target.value)}
-                    className="w-full px-3 py-2 text-sm font-mono-tabular bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] font-mono-tabular bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Type
                   </label>
                   <select
                     value={newCaseType}
                     onChange={(e) => setNewCaseType(e.target.value as CaseType)}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   >
                     <option value="legal">Legal Case</option>
                     <option value="investigation">Investigation</option>
@@ -873,7 +958,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                   Title / Caption *
                 </label>
                 <input
@@ -882,13 +967,13 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                   value={newCaseTitle}
                   onChange={(e) => setNewCaseTitle(e.target.value)}
                   placeholder="e.g. The City of Seattle vs. ..."
-                  className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                  className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Court / Organization
                   </label>
                   <input
@@ -896,42 +981,42 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                     value={newCaseCourt}
                     onChange={(e) => setNewCaseCourt(e.target.value)}
                     placeholder="e.g. Seattle Municipal Court"
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Judge / Lead
                   </label>
                   <input
                     type="text"
                     value={newCaseJudge}
                     onChange={(e) => setNewCaseJudge(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Subject / Charge
                   </label>
                   <input
                     type="text"
                     value={newCaseCharge}
                     onChange={(e) => setNewCaseCharge(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                  <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                     Status
                   </label>
                   <select
                     value={newCaseStatus}
                     onChange={(e) => setNewCaseStatus(e.target.value as CaseStatus)}
-                    className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                    className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                   >
                     <option value="Active">Active</option>
                     <option value="Draft">Draft</option>
@@ -943,14 +1028,14 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
                   Executive Summary
                 </label>
                 <textarea
                   rows={3}
                   value={newCaseSummary}
                   onChange={(e) => setNewCaseSummary(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md"
+                  className="w-full px-2.5 py-2 text-[13px] bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                 />
               </div>
 
@@ -963,20 +1048,20 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 <span>Initialize with 9 modular dossier report sections</span>
               </label>
 
-              <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-2">
+              <div className="pt-3 border-t border-[#ddd8ce] dark:border-[#262b27] flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowNewCaseModal(false)}
-                  className="px-4 py-2 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                  className="px-4 py-2 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingCase}
-                  className="px-4 py-2 text-xs font-semibold rounded-md bg-[#3061d0] text-white hover:bg-[#2752b4] disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 disabled:opacity-50 cursor-pointer"
                 >
-                  {creatingCase ? 'Creating...' : 'Create Dossier'}
+                  {creatingCase ? 'Creating…' : 'Create Dossier'}
                 </button>
               </div>
             </form>

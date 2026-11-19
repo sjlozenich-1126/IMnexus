@@ -37,45 +37,45 @@ export const AccessRolesView: React.FC<AccessRolesViewProps> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-zinc-950 dark:text-white">
+        <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#0f1210] dark:text-[#f3f0e9]">
           Access Control &amp; Security
         </h1>
-        <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-1">
+        <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-1">
           Manage workspace stakeholder roles, cloud synchronization, and AES-256-GCM vault encryption.
         </p>
       </div>
 
       {/* Current Session Profile & Encryption Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3">
-            <KeyRound className="w-3.5 h-3.5 text-[#3061d0]" />
+        <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-5">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.1em] text-[#6a716b] mb-3">
+            <KeyRound className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
             <span>Your Authenticated Identity</span>
           </div>
-          <div className="text-base font-bold text-zinc-950 dark:text-white">
+          <div className="text-sm font-semibold text-[#0f1210] dark:text-[#f3f0e9]">
             {currentUser.displayName}
           </div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 mb-3">
+          <div className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5 mb-3">
             {currentUser.email}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">Workspace Role:</span>
+            <span className="text-xs text-[#6a716b]">Workspace Role:</span>
             <StatusLabel status={currentUser.role} />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3">
-            <Lock className="w-3.5 h-3.5 text-[#3061d0]" />
+        <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-5">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.1em] text-[#6a716b] mb-3">
+            <Lock className="w-3.5 h-3.5 text-[#2d5a3d] dark:text-[#7fb892]" />
             <span>Cryptographic Storage &amp; Sync</span>
           </div>
-          <div className="space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
+          <div className="space-y-2 text-xs text-[#0f1210]/85 dark:text-[#f3f0e9]/85">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-[#2d5a3d] dark:text-[#7fb892] shrink-0" />
               <span>Files encrypted at rest with AES-256-GCM &amp; SHA-256 chain-of-custody hashing</span>
             </div>
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-[#2d5a3d] dark:text-[#7fb892] shrink-0" />
               <span>Firestore real-time cloud sync enforced by Zero-Trust RBAC security rules</span>
             </div>
           </div>
@@ -83,18 +83,18 @@ export const AccessRolesView: React.FC<AccessRolesViewProps> = ({
       </div>
 
       {/* Role Definitions Matrix */}
-      <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg p-5">
-        <h2 className="text-sm font-bold mb-4">Role-Based Access Matrix</h2>
+      <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-5">
+        <h2 className="text-[13px] font-semibold mb-4">Role-Based Access Matrix</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {roleDefinitions.map((r) => (
             <div
               key={r.role}
-              className="p-3.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900"
+              className="p-3.5 border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#0c0e0c]"
             >
-              <div className="text-xs font-bold text-[#3061d0] dark:text-blue-400 mb-1">
+              <div className="text-xs font-semibold text-[#2d5a3d] dark:text-[#7fb892] mb-1">
                 {r.role}
               </div>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              <p className="text-xs text-[#6a716b] dark:text-[#8d948e] leading-relaxed">
                 {r.scope}
               </p>
             </div>
@@ -103,41 +103,41 @@ export const AccessRolesView: React.FC<AccessRolesViewProps> = ({
       </div>
 
       {/* Workspace User Directory (Admin Only) */}
-      <div className="bg-white dark:bg-[#141418] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
-        <div className="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-2">
-          <Users className="w-4 h-4 text-[#3061d0]" />
-          <h2 className="text-sm font-bold">Workspace Stakeholders</h2>
+      <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] overflow-x-auto">
+        <div className="px-4 py-3 border-b border-[#ddd8ce] dark:border-[#262b27] flex items-center gap-2">
+          <Users className="w-4 h-4 text-[#2d5a3d] dark:text-[#7fb892]" />
+          <h2 className="text-[13px] font-semibold">Workspace Stakeholders</h2>
         </div>
         {!isAdmin ? (
-          <div className="p-6 text-xs text-zinc-500">
+          <div className="p-6 text-xs text-[#6a716b]">
             Workspace-wide role assignments are restricted to Administrators. Case owners can grant per-case stakeholder permissions inside each Case Workspace under the Stakeholder Roles tab.
           </div>
         ) : workspaceUsers.length === 0 ? (
-          <div className="p-6 text-xs text-zinc-500">No additional workspace accounts registered yet.</div>
+          <div className="p-6 text-xs text-[#6a716b]">No additional workspace accounts registered yet.</div>
         ) : (
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-[13px] border-collapse">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">Email</th>
-                <th className="py-3 px-4">Current Role</th>
-                <th className="py-3 px-4 text-right">Assign Role</th>
+              <tr className="border-b border-[#ddd8ce] dark:border-[#262b27] bg-black/[0.015] dark:bg-white/[0.02] text-[10px] font-medium uppercase tracking-[0.1em] text-[#6a716b]">
+                <th className="py-2.5 px-3.5">User</th>
+                <th className="py-2.5 px-3.5">Email</th>
+                <th className="py-2.5 px-3.5">Current Role</th>
+                <th className="py-2.5 px-3.5 text-right">Assign Role</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <tbody className="divide-y divide-[#e9e5db] dark:divide-[#222723]">
               {workspaceUsers.map((u) => (
                 <tr key={u.uid}>
-                  <td className="py-3 px-4 font-semibold">{u.displayName}</td>
-                  <td className="py-3 px-4 text-zinc-500">{u.email}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-2.5 px-3.5 font-medium">{u.displayName}</td>
+                  <td className="py-2.5 px-3.5 text-[#6a716b]">{u.email}</td>
+                  <td className="py-2.5 px-3.5">
                     <StatusLabel status={u.role} />
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-2.5 px-3.5 text-right">
                     <select
                       value={u.role}
                       disabled={u.uid === currentUser.uid}
                       onChange={(e) => void updateUserRole(u.uid, e.target.value as UserRole)}
-                      className="px-2.5 py-1 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded"
+                      className="px-2.5 py-1 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
                     >
                       <option value="admin">Admin</option>
                       <option value="editor">Editor</option>
