@@ -154,6 +154,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const [customFields, setCustomFields] = useState<CustomField[]>(caseRecord.customFields || []);
   const [saving, setSaving] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
@@ -317,8 +318,23 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   );
 
   const showFlash = (msg: string) => {
+    setSaveError(null);
     setSaveNotice(msg);
     setTimeout(() => setSaveNotice(null), 2600);
+  };
+
+  const formatWriteError = (err: unknown): string => {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.includes('resource-exhausted') || raw.toLowerCase().includes('quota')) {
+      return 'Cloud Firestore daily free write quota reached. Your edits stay active in this session and can be saved after the daily reset.';
+    }
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed?.error) return parsed.error;
+    } catch {
+      // plain error string
+    }
+    return raw || 'Unable to save changes to Cloud Firestore.';
   };
 
   const updateFormField = (patch: Partial<typeof form>) => {
@@ -326,9 +342,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
     setForm((prev) => ({ ...prev, ...patch }));
   };
 
-  const handleSaveMetadata = async () => {
-    if (!canEdit) return;
+  const handleSaveMetadata = async (): Promise<boolean> => {
+    if (!canEdit) return false;
     setSaving(true);
+    setSaveError(null);
     try {
       await updateCaseRecord(caseRecord.id, {
         caseNumber: form.caseNumber,
@@ -353,6 +370,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       setHasUnsavedDraft(false);
       onClearLiveCaseDraft?.(caseRecord.id);
       showFlash('Case saved to cloud.');
+      return true;
+    } catch (err) {
+      setSaveError(formatWriteError(err));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -361,8 +382,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const handlePublish = async () => {
     if (!isOwnerOrAdmin) return;
     setPublishing(true);
+    setSaveError(null);
     try {
-      await handleSaveMetadata();
+      const savedOk = await handleSaveMetadata();
+      if (!savedOk) return;
       const updatedRecord: CaseRecord = {
         ...caseRecord,
         ...form,
@@ -380,6 +403,8 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
         actorName: userName,
       });
       showFlash(`Published to /site/${liveSlug}`);
+    } catch (err) {
+      setSaveError(formatWriteError(err));
     } finally {
       setPublishing(false);
     }
@@ -388,35 +413,43 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const handleUnpublish = async () => {
     if (!isOwnerOrAdmin) return;
     setPublishing(true);
+    setSaveError(null);
     try {
       await unpublishCaseSite(caseRecord, userName);
       showFlash('Public site unpublished.');
+    } catch (err) {
+      setSaveError(formatWriteError(err));
     } finally {
       setPublishing(false);
     }
   };
 
   const handleQuickUpload = async (file: File, category: 'document' | 'evidence') => {
-    const uploaded = await uploadEncryptedVaultFile(file, false);
-    const mediaType = inferMediaType(uploaded.mimeType, uploaded.fileName);
-    await createVaultItem({
-      ownerId: userId,
-      actorName: userName,
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      category,
-      mediaType,
-      docType: mediaType.toUpperCase(),
-      fileId: uploaded.fileId,
-      fileName: uploaded.fileName,
-      mimeType: uploaded.mimeType,
-      fileSize: uploaded.fileSize,
-      sha256: uploaded.sha256,
-      encrypted: true,
-      caseIds: [caseRecord.id],
-      tags: [],
-      isPublic: false,
-    });
-    showFlash(`${category === 'document' ? 'Document' : 'Evidence'} encrypted & linked.`);
+    setSaveError(null);
+    try {
+      const uploaded = await uploadEncryptedVaultFile(file, false);
+      const mediaType = inferMediaType(uploaded.mimeType, uploaded.fileName);
+      await createVaultItem({
+        ownerId: userId,
+        actorName: userName,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        category,
+        mediaType,
+        docType: mediaType.toUpperCase(),
+        fileId: uploaded.fileId,
+        fileName: uploaded.fileName,
+        mimeType: uploaded.mimeType,
+        fileSize: uploaded.fileSize,
+        sha256: uploaded.sha256,
+        encrypted: true,
+        caseIds: [caseRecord.id],
+        tags: [],
+        isPublic: false,
+      });
+      showFlash(`${category === 'document' ? 'Document' : 'Evidence'} encrypted & linked.`);
+    } catch (err) {
+      setSaveError(formatWriteError(err));
+    }
   };
 
   const shareableUrl = `${window.location.origin}/site/${slugify(form.publicSlug)}`;
@@ -430,6 +463,18 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
     <div className="space-y-4">
       {/* Case Header Card */}
       <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-5 py-5">
+        {saveError && (
+          <div className="mb-3 px-3 py-2 border border-[#8b3a3a]/40 bg-[#8b3a3a]/10 text-xs text-[#8b3a3a] dark:text-[#e39b9b] flex items-center justify-between gap-3">
+            <span>{saveError}</span>
+            <button
+              type="button"
+              onClick={() => setSaveError(null)}
+              className="underline cursor-pointer shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#6a716b] dark:text-[#8d948e] mb-2">
           <div>
             <button
@@ -1213,11 +1258,13 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                               <input
                                 type="text"
                                 defaultValue={sec.title}
-                                onBlur={(e) =>
-                                  void updateCaseSection(caseRecord.id, sec.id, {
-                                    title: e.target.value,
-                                  })
-                                }
+                                onBlur={(e) => {
+                                  if (e.target.value !== sec.title) {
+                                    void updateCaseSection(caseRecord.id, sec.id, {
+                                      title: e.target.value,
+                                    }).catch((err) => setSaveError(formatWriteError(err)));
+                                  }
+                                }}
                                 className="px-2 py-1 text-[13px] font-semibold bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27]"
                               />
                             ) : (
@@ -1299,11 +1346,13 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                           <textarea
                             rows={6}
                             defaultValue={sec.content}
-                            onBlur={(e) =>
-                              void updateCaseSection(caseRecord.id, sec.id, {
-                                content: e.target.value,
-                              })
-                            }
+                            onBlur={(e) => {
+                              if (e.target.value !== sec.content) {
+                                void updateCaseSection(caseRecord.id, sec.id, {
+                                  content: e.target.value,
+                                }).catch((err) => setSaveError(formatWriteError(err)));
+                              }
+                            }}
                             placeholder="Write section narrative, legal analysis, or factual findings…"
                             className="w-full px-3 py-2 text-[13px] bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                           />

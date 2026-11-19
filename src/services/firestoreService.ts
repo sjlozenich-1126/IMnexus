@@ -130,7 +130,11 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
 
     if (Object.keys(updates).length > 0) {
       updates.updatedAt = serverTimestamp();
-      await updateDoc(userRef, updates);
+      try {
+        await updateDoc(userRef, updates);
+      } catch (updateErr) {
+        console.warn('Skipped optional profile metadata sync:', updateErr);
+      }
     }
 
     return {
