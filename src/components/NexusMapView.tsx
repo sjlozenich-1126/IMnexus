@@ -93,6 +93,16 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
 
   const nodeMap = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
 
+  const effectiveSelectedNodeId = useMemo(() => {
+    if (selectedNodeId && nodeMap.has(selectedNodeId)) return selectedNodeId;
+    return (
+      graph.nodes.find((n) => n.kind === 'tag')?.id ||
+      graph.nodes.find((n) => n.kind === 'case')?.id ||
+      graph.nodes[0]?.id ||
+      null
+    );
+  }, [selectedNodeId, nodeMap, graph.nodes]);
+
   const availableKinds = useMemo(() => {
     const present = new Set<NexusNodeKind>(graph.nodes.map((n) => n.kind));
     return (
@@ -145,6 +155,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
     return graph.nodes.filter((n) => n.kind === kindFilter || n.kind === 'case');
   }, [graph.nodes, kindFilter]);
 
+  const visibleTagNodes = useMemo(
+    () => visibleNodes.filter((n) => n.kind === 'tag'),
+    [visibleNodes]
+  );
+
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
 
   const visibleEdges = useMemo(
@@ -153,7 +168,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
     [graph.edges, visibleNodeIds]
   );
 
-  const activeNodeId = hoveredNodeId || selectedNodeId;
+  const activeNodeId = hoveredNodeId || effectiveSelectedNodeId;
 
   const connectedToActive = useMemo(() => {
     if (!activeNodeId) return new Set<string>();
@@ -165,7 +180,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
     return set;
   }, [activeNodeId, visibleEdges]);
 
-  const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) || null : null;
+  const selectedNode = effectiveSelectedNodeId ? nodeMap.get(effectiveSelectedNodeId) || null : null;
 
   const selectedConnections = useMemo(() => {
     if (!selectedNode) return [];
@@ -502,7 +517,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
 
                 {/* Nodes */}
                 {visibleNodes.map((node) => {
-                  const isSelected = selectedNodeId === node.id;
+                  const isSelected = effectiveSelectedNodeId === node.id;
                   const isActive = connectedToActive.has(node.id);
                   const isDimmed = activeNodeId !== null && !isActive;
                   const spec = KIND_MARKER[node.kind];
@@ -512,6 +527,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                       : node.kind === 'tag' || node.kind === 'metadata'
                       ? 10
                       : 8;
+                  const tooltip = `${node.fullLabel || node.label}${
+                    node.subtitle ? ` · ${node.subtitle}` : ''
+                  }`;
 
                   return (
                     <g
@@ -523,6 +541,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                       style={{ cursor: 'pointer', opacity: isDimmed ? 0.3 : 1 }}
                       className="transition-opacity duration-150"
                     >
+                      <title>{tooltip}</title>
                       {isSelected && (
                         <circle
                           r={size + 6}
@@ -587,6 +606,33 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                 })}
               </svg>
 
+              {visibleTagNodes.length > 0 && (
+                <div className="px-4 py-2 border-t border-[#e9e5db] dark:border-[#202521] bg-[#faf8f4] dark:bg-[#141815] flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-[#6a716b] dark:text-[#8d948e] shrink-0">
+                    Active Tags ({visibleTagNodes.length}):
+                  </span>
+                  {visibleTagNodes.map((tagNode) => {
+                    const isSel = effectiveSelectedNodeId === tagNode.id;
+                    return (
+                      <button
+                        key={tagNode.id}
+                        type="button"
+                        onClick={() => setSelectedNodeId(tagNode.id)}
+                        onMouseEnter={() => setHoveredNodeId(tagNode.id)}
+                        onMouseLeave={() => setHoveredNodeId(null)}
+                        className={`text-left transition-colors cursor-pointer ${
+                          isSel
+                            ? 'text-[#0f1210] dark:text-[#f3f0e9] font-semibold underline underline-offset-4'
+                            : 'text-[#8b3a3a] dark:text-[#e39b9b] hover:underline underline-offset-4'
+                        }`}
+                      >
+                        {tagNode.fullLabel || tagNode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="px-4 py-2.5 border-t border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9]/60 dark:bg-[#0c0e0c]/70 flex flex-wrap items-center justify-between gap-3 text-[11px] text-[#6a716b] dark:text-[#8d948e]">
                 <div className="flex flex-wrap items-center gap-3">
                   <span>◆ Case / #Tag / Collection</span>
@@ -624,10 +670,10 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                               setSelectedNodeId(col.id);
                               setSelectedMatrixCell(null);
                             }}
-                            title={col.label}
-                            className="p-2 text-center font-medium text-[11px] text-[#0f1210] dark:text-[#f3f0e9] border-b border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9]/40 dark:bg-[#0c0e0c]/40 min-w-[78px] max-w-[115px] cursor-pointer hover:bg-[#e9e5db] dark:hover:bg-[#1b201c]"
+                            title={col.fullLabel || col.label}
+                            className="p-2 text-center font-medium text-[11px] text-[#0f1210] dark:text-[#f3f0e9] border-b border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9]/40 dark:bg-[#0c0e0c]/40 min-w-[92px] max-w-[140px] cursor-pointer hover:bg-[#e9e5db] dark:hover:bg-[#1b201c]"
                           >
-                            <div className="truncate">{col.label}</div>
+                            <div className="truncate">{col.fullLabel || col.label}</div>
                           </th>
                         ))}
                       </tr>
@@ -640,9 +686,10 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                               setSelectedNodeId(row.id);
                               setSelectedMatrixCell(null);
                             }}
-                            className="p-2 text-left font-medium text-[11px] text-[#0f1210] dark:text-[#f3f0e9] border-b border-r border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9]/40 dark:bg-[#0c0e0c]/40 max-w-[180px] cursor-pointer hover:bg-[#e9e5db] dark:hover:bg-[#1b201c]"
+                            title={row.fullLabel || row.label}
+                            className="p-2 text-left font-medium text-[11px] text-[#0f1210] dark:text-[#f3f0e9] border-b border-r border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9]/40 dark:bg-[#0c0e0c]/40 max-w-[210px] cursor-pointer hover:bg-[#e9e5db] dark:hover:bg-[#1b201c]"
                           >
-                            <div className="truncate">{row.label}</div>
+                            <div className="truncate">{row.fullLabel || row.label}</div>
                             {row.subtitle && (
                               <div className="text-[10px] font-normal text-[#6a716b] dark:text-[#8d948e] truncate">
                                 {row.subtitle}
@@ -753,7 +800,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                         {graph.scope === 'portfolio' ? 'Case Axis →' : 'Time Axis →'}
                       </div>
                       {graph.chronology.map((pt) => {
-                        const isSel = selectedNodeId === pt.nodeId;
+                        const isSel = effectiveSelectedNodeId === pt.nodeId;
                         return (
                           <button
                             key={pt.id}
@@ -807,10 +854,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                                 <button
                                   key={nid}
                                   type="button"
+                                  title={n.fullLabel || n.label}
                                   onClick={() => setSelectedNodeId(nid)}
                                   className="block w-full text-left px-1.5 py-0.5 text-[11px] font-medium border border-[#8b3a3a]/30 text-[#8b3a3a] dark:text-[#e39b9b] hover:border-[#8b3a3a] truncate cursor-pointer"
                                 >
-                                  {n.label}
+                                  {n.fullLabel || n.label}
                                 </button>
                               );
                             })
@@ -919,8 +967,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                   {selectedMatrixCell.score === 1 ? '' : 's'}
                 </div>
                 <h4 className="text-sm font-semibold text-[#0f1210] dark:text-[#f3f0e9]">
-                  {nodeMap.get(selectedMatrixCell.rowId)?.label} ×{' '}
-                  {nodeMap.get(selectedMatrixCell.colId)?.label}
+                  {nodeMap.get(selectedMatrixCell.rowId)?.fullLabel ||
+                    nodeMap.get(selectedMatrixCell.rowId)?.label}{' '}
+                  ×{' '}
+                  {nodeMap.get(selectedMatrixCell.colId)?.fullLabel ||
+                    nodeMap.get(selectedMatrixCell.colId)?.label}
                 </h4>
               </div>
 
@@ -959,7 +1010,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                           }}
                           className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-[#f3f0e9] dark:bg-[#0c0e0c] hover:border-[#0f1210] cursor-pointer"
                         >
-                          {bn.label}
+                          {bn.fullLabel || bn.label}
                         </button>
                       );
                     })}
@@ -977,8 +1028,8 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                 <div className="text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
                   {KIND_LABELS[selectedNode.kind]} · {selectedNode.degree} connections
                 </div>
-                <h4 className="text-sm font-semibold text-[#0f1210] dark:text-[#f3f0e9]">
-                  {selectedNode.label}
+                <h4 className="text-sm font-semibold text-[#0f1210] dark:text-[#f3f0e9] break-words">
+                  {selectedNode.fullLabel || selectedNode.label}
                 </h4>
                 {selectedNode.subtitle && (
                   <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5">
@@ -1008,11 +1059,12 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                         key={edge.id}
                         type="button"
                         onClick={() => setSelectedNodeId(node.id)}
+                        title={node.fullLabel || node.label}
                         className="w-full text-left px-3 py-2 hover:bg-[#faf8f4] dark:hover:bg-[#1c201c] flex items-center justify-between gap-2 cursor-pointer"
                       >
                         <div className="min-w-0">
                           <div className="text-xs font-medium text-[#0f1210] dark:text-[#f3f0e9] truncate">
-                            {node.label}
+                            {node.fullLabel || node.label}
                           </div>
                           <div className="text-[10px] text-[#6a716b] dark:text-[#8d948e] truncate">
                             {edge.relation}

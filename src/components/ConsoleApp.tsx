@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { signOut, type User } from 'firebase/auth';
 import {
   BarChart3,
@@ -79,6 +79,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [liveCaseDrafts, setLiveCaseDrafts] = useState<Record<string, Partial<CaseRecord>>>({});
   const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
   const [collections, setCollections] = useState<EvidenceCollection[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -137,6 +138,28 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
     };
   }, [firebaseUser, userProfile.role]);
 
+  const handleLiveCaseDraftChange = useCallback(
+    (caseId: string, draft: Partial<CaseRecord>) => {
+      setLiveCaseDrafts((prev) => ({ ...prev, [caseId]: draft }));
+    },
+    []
+  );
+
+  const handleClearLiveCaseDraft = useCallback((caseId: string) => {
+    setLiveCaseDrafts((prev) => {
+      if (!(caseId in prev)) return prev;
+      const next = { ...prev };
+      delete next[caseId];
+      return next;
+    });
+  }, []);
+
+  const effectiveCases = useMemo(
+    () =>
+      cases.map((c) => (liveCaseDrafts[c.id] ? { ...c, ...liveCaseDrafts[c.id] } : c)),
+    [cases, liveCaseDrafts]
+  );
+
   const docCount = useMemo(
     () => vaultItems.filter((v) => v.category === 'document').length,
     [vaultItems]
@@ -146,38 +169,39 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
     [vaultItems]
   );
   const projectCount = useMemo(
-    () => cases.filter((c) => c.caseType === 'project').length,
-    [cases]
+    () => effectiveCases.filter((c) => c.caseType === 'project').length,
+    [effectiveCases]
   );
   const publicItemsCount = useMemo(
     () =>
       vaultItems.filter((v) => v.isPublic).length +
-      cases.filter((c) => c.isPublished).length,
-    [vaultItems, cases]
+      effectiveCases.filter((c) => c.isPublished).length,
+    [vaultItems, effectiveCases]
   );
 
   const portfolioNexusGraph = useMemo(
-    () => buildPortfolioNexus({ cases, vaultItems, collections }),
-    [cases, vaultItems, collections]
+    () => buildPortfolioNexus({ cases: effectiveCases, vaultItems, collections }),
+    [effectiveCases, vaultItems, collections]
   );
 
   const selectedCase = useMemo(
-    () => cases.find((c) => c.id === selectedCaseId) || null,
-    [cases, selectedCaseId]
+    () => effectiveCases.find((c) => c.id === selectedCaseId) || null,
+    [effectiveCases, selectedCaseId]
   );
 
   const globalSearchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return { cases: [], vault: [], collections: [] };
     return {
-      cases: cases
+      cases: effectiveCases
         .filter(
           (c) =>
             c.title.toLowerCase().includes(q) ||
             c.caseNumber.toLowerCase().includes(q) ||
             (c.court || '').toLowerCase().includes(q) ||
             (c.judge || '').toLowerCase().includes(q) ||
-            (c.summary || '').toLowerCase().includes(q)
+            (c.summary || '').toLowerCase().includes(q) ||
+            (c.tags || []).some((t) => t.toLowerCase().includes(q))
         )
         .slice(0, 5),
       vault: vaultItems
@@ -198,7 +222,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
         )
         .slice(0, 4),
     };
-  }, [searchQuery, cases, vaultItems, collections]);
+  }, [searchQuery, effectiveCases, vaultItems, collections]);
 
   const openCase = (caseId: string) => {
     setSelectedCaseId(caseId);
@@ -270,7 +294,9 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
   ];
 
   const displayedCases =
-    view === 'projects' ? cases.filter((c) => c.caseType === 'project') : cases;
+    view === 'projects'
+      ? effectiveCases.filter((c) => c.caseType === 'project')
+      : effectiveCases;
 
   return (
     <div className="min-h-screen flex bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#0f1210] dark:text-[#f3f0e9]">
@@ -485,8 +511,8 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
 
             <button
               type="button"
-              onClick={() => exportCasesPortfolioCsv(cases, vaultItems, collections)}
-              disabled={cases.length === 0}
+              onClick={() => exportCasesPortfolioCsv(effectiveCases, vaultItems, collections)}
+              disabled={effectiveCases.length === 0}
               className="hidden sm:inline-flex px-3 py-[6px] text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent text-[#0f1210] dark:text-[#f3f0e9] hover:border-[#0f1210] disabled:opacity-45 cursor-pointer whitespace-nowrap"
             >
               Export
@@ -516,7 +542,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                     Cases
                   </div>
                   <div className="text-2xl font-semibold tracking-[-0.02em] font-mono-tabular">
-                    {cases.length}
+                    {effectiveCases.length}
                   </div>
                 </div>
                 <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] px-[18px] py-4">
@@ -649,7 +675,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 </div>
 
                 <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] overflow-x-auto">
-                  {cases.length === 0 ? (
+                  {effectiveCases.length === 0 ? (
                     <div className="p-10 text-center space-y-3">
                       <h3 className="text-sm font-semibold">Create your first IMnexus Case or Project</h3>
                       <p className="text-xs text-[#6a716b] dark:text-[#8d948e] max-w-md mx-auto">
@@ -678,7 +704,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#e9e5db] dark:divide-[#222723]">
-                        {cases.slice(0, 8).map((c) => (
+                        {effectiveCases.slice(0, 8).map((c) => (
                           <tr
                             key={c.id}
                             onClick={() => openCase(c.id)}
@@ -833,6 +859,8 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 userRole={userProfile.role}
                 onBack={() => setView('cases')}
                 onOpenPublicSite={onOpenPublicSite}
+                onLiveCaseDraftChange={handleLiveCaseDraftChange}
+                onClearLiveCaseDraft={handleClearLiveCaseDraft}
               />
             </div>
           )}
@@ -843,7 +871,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 mode="documents"
                 items={vaultItems}
                 collections={collections}
-                cases={cases}
+                cases={effectiveCases}
                 userId={firebaseUser.uid}
                 userName={userProfile.displayName}
                 userRole={userProfile.role}
@@ -859,7 +887,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
                 mode="evidence"
                 items={vaultItems}
                 collections={collections}
-                cases={cases}
+                cases={effectiveCases}
                 userId={firebaseUser.uid}
                 userName={userProfile.displayName}
                 userRole={userProfile.role}
@@ -894,7 +922,7 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
           {view === 'reports' && (
             <div className="max-w-6xl">
               <ReportsAnalyticsView
-                cases={cases}
+                cases={effectiveCases}
                 vaultItems={vaultItems}
                 collections={collections}
               />

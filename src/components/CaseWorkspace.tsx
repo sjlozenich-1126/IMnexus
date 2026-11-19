@@ -88,6 +88,23 @@ interface CaseWorkspaceProps {
   userRole: UserRole;
   onBack: () => void;
   onOpenPublicSite: (slug: string) => void;
+  onLiveCaseDraftChange?: (caseId: string, draft: Partial<CaseRecord>) => void;
+  onClearLiveCaseDraft?: (caseId: string) => void;
+}
+
+function parseTagsInput(raw: string): string[] {
+  const seen = new Set<string>();
+  const parsed: string[] = [];
+  for (const part of raw.split(/[,\n]+/)) {
+    const cleaned = part.replace(/^#+/, '').trim().slice(0, 100);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parsed.push(cleaned);
+    if (parsed.length >= 20) break;
+  }
+  return parsed;
 }
 
 export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
@@ -100,6 +117,8 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   userRole,
   onBack,
   onOpenPublicSite,
+  onLiveCaseDraftChange,
+  onClearLiveCaseDraft,
 }) => {
   const canEdit =
     userRole === 'admin' ||
@@ -160,7 +179,18 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
   const quickDocRef = useRef<HTMLInputElement>(null);
   const quickEvRef = useRef<HTMLInputElement>(null);
 
+  const lastCaseIdRef = useRef<string>(caseRecord.id);
+  const [hasUnsavedDraft, setHasUnsavedDraft] = useState(false);
+
+  const parsedTags = useMemo(() => parseTagsInput(form.tags), [form.tags]);
+
   useEffect(() => {
+    const caseChanged = lastCaseIdRef.current !== caseRecord.id;
+    if (!caseChanged && hasUnsavedDraft) {
+      return;
+    }
+    lastCaseIdRef.current = caseRecord.id;
+    setHasUnsavedDraft(false);
     setForm({
       caseNumber: caseRecord.caseNumber,
       title: caseRecord.title,
@@ -181,7 +211,40 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       publicCoverUrl: caseRecord.publicCoverUrl || DEFAULT_COVER_URL,
     });
     setCustomFields(caseRecord.customFields || []);
-  }, [caseRecord]);
+  }, [caseRecord, hasUnsavedDraft]);
+
+  useEffect(() => {
+    if (!hasUnsavedDraft || !onLiveCaseDraftChange) return;
+    onLiveCaseDraftChange(caseRecord.id, {
+      caseNumber: form.caseNumber || caseRecord.caseNumber,
+      title: form.title || caseRecord.title,
+      caseType: form.caseType as CaseType,
+      court: form.court,
+      judge: form.judge,
+      charge: form.charge,
+      arrestDates: form.arrestDates,
+      closureDate: form.closureDate,
+      status: form.status as CaseStatus,
+      disposition: form.disposition,
+      summary: form.summary,
+      tags: parsedTags,
+      customFields: customFields.filter((cf) => cf.label.trim() && cf.value.trim()),
+      publicSlug: form.publicSlug,
+      publicHeadline: form.publicHeadline,
+      publicSubtitle: form.publicSubtitle,
+      publicIntro: form.publicIntro,
+      publicCoverUrl: form.publicCoverUrl,
+    });
+  }, [
+    hasUnsavedDraft,
+    caseRecord.id,
+    caseRecord.caseNumber,
+    caseRecord.title,
+    form,
+    parsedTags,
+    customFields,
+    onLiveCaseDraftChange,
+  ]);
 
   useEffect(() => {
     return subscribeCaseSubcollections(caseRecord.id, {
@@ -242,10 +305,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
           status: form.status as CaseStatus,
           disposition: form.disposition,
           customFields: customFields.filter((cf) => cf.label.trim() && cf.value.trim()),
-          tags: form.tags
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
+          tags: parsedTags,
         },
         sections,
         timeline,
@@ -253,12 +313,17 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
         vaultItems,
         collections,
       }),
-    [caseRecord, form, customFields, sections, timeline, actors, vaultItems, collections]
+    [caseRecord, form, customFields, parsedTags, sections, timeline, actors, vaultItems, collections]
   );
 
   const showFlash = (msg: string) => {
     setSaveNotice(msg);
     setTimeout(() => setSaveNotice(null), 2600);
+  };
+
+  const updateFormField = (patch: Partial<typeof form>) => {
+    setHasUnsavedDraft(true);
+    setForm((prev) => ({ ...prev, ...patch }));
   };
 
   const handleSaveMetadata = async () => {
@@ -278,16 +343,15 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
         disposition: form.disposition,
         summary: form.summary,
         customFields: customFields.filter((cf) => cf.label.trim()),
-        tags: form.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: parsedTags,
         publicSlug: slugify(form.publicSlug),
         publicHeadline: form.publicHeadline,
         publicSubtitle: form.publicSubtitle,
         publicIntro: form.publicIntro,
         publicCoverUrl: form.publicCoverUrl,
       });
+      setHasUnsavedDraft(false);
+      onClearLiveCaseDraft?.(caseRecord.id);
       showFlash('Case saved to cloud.');
     } finally {
       setSaving(false);
@@ -302,10 +366,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
       const updatedRecord: CaseRecord = {
         ...caseRecord,
         ...form,
-        tags: form.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: parsedTags,
         customFields: customFields.filter((cf) => cf.label.trim()),
         publicSlug: slugify(form.publicSlug),
       };
@@ -544,7 +605,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.caseNumber}
-                      onChange={(e) => setForm({ ...form, caseNumber: e.target.value })}
+                      onChange={(e) => updateFormField({ caseNumber: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -554,7 +615,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       disabled={!canEdit}
                       value={form.caseType}
                       onChange={(e) =>
-                        setForm({ ...form, caseType: e.target.value as CaseType })
+                        updateFormField({ caseType: e.target.value as CaseType })
                       }
                       className={inputClass}
                     >
@@ -569,7 +630,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      onChange={(e) => updateFormField({ title: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -579,7 +640,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.court}
-                      onChange={(e) => setForm({ ...form, court: e.target.value })}
+                      onChange={(e) => updateFormField({ court: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -589,7 +650,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.judge}
-                      onChange={(e) => setForm({ ...form, judge: e.target.value })}
+                      onChange={(e) => updateFormField({ judge: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -599,7 +660,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.charge}
-                      onChange={(e) => setForm({ ...form, charge: e.target.value })}
+                      onChange={(e) => updateFormField({ charge: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -609,7 +670,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       disabled={!canEdit}
                       value={form.status}
                       onChange={(e) =>
-                        setForm({ ...form, status: e.target.value as CaseStatus })
+                        updateFormField({ status: e.target.value as CaseStatus })
                       }
                       className={inputClass}
                     >
@@ -626,7 +687,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.arrestDates}
-                      onChange={(e) => setForm({ ...form, arrestDates: e.target.value })}
+                      onChange={(e) => updateFormField({ arrestDates: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -636,7 +697,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.closureDate}
-                      onChange={(e) => setForm({ ...form, closureDate: e.target.value })}
+                      onChange={(e) => updateFormField({ closureDate: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -646,20 +707,66 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       type="text"
                       disabled={!canEdit}
                       value={form.disposition}
-                      onChange={(e) => setForm({ ...form, disposition: e.target.value })}
+                      onChange={(e) => updateFormField({ disposition: e.target.value })}
                       className={inputClass}
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className={labelClass}>Case Tags (comma-separated for Nexus mapping)</label>
+                    <label className={labelClass}>
+                      Case Tags (comma-separated — no # required; updates Nexus Map live)
+                    </label>
                     <input
                       type="text"
                       disabled={!canEdit}
                       value={form.tags}
-                      onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                      placeholder="e.g. civil-rights, municode, bodycam"
+                      onChange={(e) => updateFormField({ tags: e.target.value })}
+                      placeholder="e.g. Procedural Due Process Failure, Information asymmetry, Failure to disclose"
                       className={inputClass}
                     />
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#6a716b] dark:text-[#8d948e]">
+                      <span>
+                        <strong className="font-mono-tabular text-[#0f1210] dark:text-[#f3f0e9]">
+                          {parsedTags.length}/20
+                        </strong>{' '}
+                        {parsedTags.length === 1 ? 'tag' : 'tags'} active in Nexus
+                        {hasUnsavedDraft && ' · Unsaved draft (click Save to persist)'}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        {hasUnsavedDraft && canEdit && (
+                          <button
+                            type="button"
+                            onClick={handleSaveMetadata}
+                            disabled={saving}
+                            className="font-medium text-[#0f1210] dark:text-[#f3f0e9] underline underline-offset-4 cursor-pointer"
+                          >
+                            {saving ? 'Saving…' : 'Save Tags'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('nexus')}
+                          className="font-medium text-[#2d5a3d] dark:text-[#7fb892] hover:underline underline-offset-4 cursor-pointer"
+                        >
+                          View on Nexus Map →
+                        </button>
+                      </div>
+                    </div>
+                    {parsedTags.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-[#e9e5db] dark:border-[#242924] flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
+                        {parsedTags.map((tag, i) => (
+                          <React.Fragment key={`${tag}-${i}`}>
+                            {i > 0 && <span className="text-[#c4bfb4] dark:text-[#3b423c]">·</span>}
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('nexus')}
+                              className="text-[#8b3a3a] dark:text-[#e39b9b] hover:underline underline-offset-2 text-left cursor-pointer"
+                            >
+                              #{tag}
+                            </button>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="sm:col-span-2">
                     <label className={labelClass}>Executive Summary</label>
@@ -667,7 +774,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                       rows={4}
                       disabled={!canEdit}
                       value={form.summary}
-                      onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                      onChange={(e) => updateFormField({ summary: e.target.value })}
                       className={inputClass}
                     />
                   </div>
@@ -681,9 +788,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   {canEdit && (
                     <button
                       type="button"
-                      onClick={() =>
-                        setCustomFields([...customFields, { label: '', value: '' }])
-                      }
+                      onClick={() => {
+                        setHasUnsavedDraft(true);
+                        setCustomFields([...customFields, { label: '', value: '' }]);
+                      }}
                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210] cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
@@ -707,6 +815,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                           onChange={(e) => {
                             const next = [...customFields];
                             next[idx] = { ...next[idx], label: e.target.value };
+                            setHasUnsavedDraft(true);
                             setCustomFields(next);
                           }}
                           className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
@@ -719,6 +828,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                           onChange={(e) => {
                             const next = [...customFields];
                             next[idx] = { ...next[idx], value: e.target.value };
+                            setHasUnsavedDraft(true);
                             setCustomFields(next);
                           }}
                           className="px-2.5 py-1.5 text-xs bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27]"
@@ -726,9 +836,10 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         {canEdit && (
                           <button
                             type="button"
-                            onClick={() =>
-                              setCustomFields(customFields.filter((_, i) => i !== idx))
-                            }
+                            onClick={() => {
+                              setHasUnsavedDraft(true);
+                              setCustomFields(customFields.filter((_, i) => i !== idx));
+                            }}
                             className="p-1.5 text-[#6a716b] hover:text-[#8b3a3a] cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

@@ -241,7 +241,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'slug', 'caseId', 'ownerId', 'published', 'caseNumber', 'title', 'caseType',
           'court', 'judge', 'charge', 'arrestDates', 'closureDate', 'status',
-          'disposition', 'headline', 'subtitle', 'intro', 'coverUrl', 'customFields',
+          'disposition', 'headline', 'subtitle', 'intro', 'coverUrl', 'tags', 'customFields',
           'sections', 'timeline', 'actors', 'documents', 'evidence', 'collections',
           'updatedAt'
         ])
@@ -263,6 +263,7 @@ service cloud.firestore {
         && (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 320))
         && (!('intro' in data) || (data.intro is string && data.intro.size() <= 8000))
         && (!('coverUrl' in data) || (data.coverUrl is string && data.coverUrl.size() <= 500))
+        && (!('tags' in data) || isBoundedStringList(data.tags, 20))
         && (!('customFields' in data) || (data.customFields is list && data.customFields.size() <= 25))
         && (!('sections' in data) || (data.sections is list && data.sections.size() <= 40))
         && (!('timeline' in data) || (data.timeline is list && data.timeline.size() <= 120))
@@ -579,7 +580,7 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'published', 'caseNumber', 'title', 'caseType', 'court', 'judge',
           'charge', 'arrestDates', 'closureDate', 'status', 'disposition',
-          'headline', 'subtitle', 'intro', 'coverUrl', 'customFields',
+          'headline', 'subtitle', 'intro', 'coverUrl', 'tags', 'customFields',
           'sections', 'timeline', 'actors', 'documents', 'evidence',
           'collections', 'updatedAt'
         ]);

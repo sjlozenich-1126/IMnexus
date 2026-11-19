@@ -22,6 +22,7 @@ export type NexusNodeKind =
 export interface NexusNode {
   id: string;
   label: string;
+  fullLabel?: string;
   subtitle?: string;
   kind: NexusNodeKind;
   x: number;
@@ -108,7 +109,7 @@ function truncateLabel(text: string, max = 26): string {
 }
 
 function normalizeToken(input: string): string {
-  return input.trim().toLowerCase();
+  return input.replace(/^#+/, '').trim().toLowerCase();
 }
 
 function placeArc(
@@ -138,14 +139,48 @@ function placeArc(
   return coords;
 }
 
+function placeStaggeredArc(
+  count: number,
+  cx: number,
+  cy: number,
+  rxA: number,
+  ryA: number,
+  rxB: number,
+  ryB: number,
+  startDeg: number,
+  endDeg: number
+): Array<{ x: number; y: number }> {
+  if (count <= 5) {
+    return placeArc(count, cx, cy, rxA, ryA, startDeg, endDeg);
+  }
+  const coords: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < count; i += 1) {
+    const t = i / (count - 1);
+    const deg = startDeg + t * (endDeg - startDeg);
+    const rad = deg * (Math.PI / 180);
+    const rx = i % 2 === 0 ? rxA : rxB;
+    const ry = i % 2 === 0 ? ryA : ryB;
+    coords.push({
+      x: cx + Math.cos(rad) * rx,
+      y: cy + Math.sin(rad) * ry,
+    });
+  }
+  return coords;
+}
+
+const STOP_WORDS = new Set(['between', 'about', 'through', 'against', 'claims', 'legal', 'process']);
+
 function textMentionsToken(haystack: string, needle: string): boolean {
   const clean = normalizeToken(needle);
   if (clean.length < 3) return false;
   const lower = haystack.toLowerCase();
   if (lower.includes(clean)) return true;
-  const parts = clean.split(/[\s\-_/]+/).filter((p) => p.length >= 4);
+  const parts = clean
+    .split(/[\s\-_/&,]+/)
+    .filter((p) => p.length >= 5 && !STOP_WORDS.has(p));
   if (parts.length >= 2) {
-    return parts.some((p) => lower.includes(p));
+    const matches = parts.filter((p) => lower.includes(p));
+    return matches.length >= 2;
   }
   return false;
 }
@@ -401,9 +436,9 @@ export function buildCaseNexus(params: {
         b[1].docIds.length;
       return scoreB - scoreA;
     })
-    .slice(0, 10);
+    .slice(0, 20);
 
-  const tagCoords = placeArc(sortedTags.length, cx, cy, 200, 145, 128, 232);
+  const tagCoords = placeStaggeredArc(sortedTags.length, cx, cy, 185, 140, 275, 195, 112, 248);
   sortedTags.forEach(([tag, info], idx) => {
     const tagId = `tag:${tag}`;
     const totalLinked =
@@ -414,14 +449,15 @@ export function buildCaseNexus(params: {
 
     nodes.push({
       id: tagId,
-      label: `#${tag}`,
+      label: truncateLabel(`#${tag}`, 22),
+      fullLabel: `#${tag}`,
       subtitle: `${info.fromCase ? 'Case Metadata Tag · ' : ''}${totalLinked} tagged links`,
       kind: 'tag',
       x: tagCoords[idx].x,
       y: tagCoords[idx].y,
       degree: 0,
-      description: `Tag #${tag} links ${
-        info.fromCase ? 'this case metadata, ' : ''
+      description: `#${tag} — Links ${
+        info.fromCase ? 'case metadata, ' : ''
       }${info.collectionIds.length} collection(s), ${info.evidenceIds.length} exhibit(s), and ${
         info.docIds.length
       } document(s).`,
@@ -889,13 +925,14 @@ export function buildPublicSiteNexus(site: PublicSite): NexusGraphData {
     itemIds: c.items.map((it) => it.id),
   }));
 
-  // Derive concise thematic tags from metadata & evidence/collections
+  // Combine explicit published case metadata tags + evidence/collection tags
   const derivedCaseTags = Array.from(
     new Set([
+      ...(site.tags || []),
       ...(site.collections || []).flatMap((c) => c.tags || []),
       ...(site.evidence || []).flatMap((e) => e.tags || []),
     ])
-  ).slice(0, 8);
+  ).slice(0, 20);
 
   return buildCaseNexus({
     caseId: site.caseId || site.slug,
@@ -1059,20 +1096,21 @@ export function buildPortfolioNexus(params: {
       const countB = b[1].caseIds.length * 3 + b[1].collectionIds.length * 2 + b[1].bridgeItemIds.length;
       return countB - countA;
     })
-    .slice(0, 12);
+    .slice(0, 25);
 
-  const tagCoords = placeArc(sortedTags.length, cx, cy, 400, 215, 192, 345);
+  const tagCoords = placeStaggeredArc(sortedTags.length, cx, cy, 345, 185, 420, 230, 192, 348);
   sortedTags.forEach(([tag, info], idx) => {
     const tagId = `tag:${tag}`;
     nodes.push({
       id: tagId,
-      label: `#${tag}`,
+      label: truncateLabel(`#${tag}`, 22),
+      fullLabel: `#${tag}`,
       subtitle: `${info.caseIds.length} case(s) · ${info.collectionIds.length} col(s) · ${info.bridgeItemIds.length} item(s)`,
       kind: 'tag',
       x: tagCoords[idx].x,
       y: tagCoords[idx].y,
       degree: 0,
-      description: `Portfolio tag #${tag} links ${info.caseIds.length} case(s), ${info.collectionIds.length} collection(s), and ${info.bridgeItemIds.length} tagged item(s).`,
+      description: `#${tag} — Portfolio tag linking ${info.caseIds.length} case(s), ${info.collectionIds.length} collection(s), and ${info.bridgeItemIds.length} tagged item(s).`,
     });
     info.caseIds.forEach((cid) => {
       edges.push({

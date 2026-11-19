@@ -59,10 +59,13 @@ function clampString(val: string | undefined, max: number): string | undefined {
 
 function clampStringArray(arr: string[] | undefined, maxItems: number, maxLen = 120): string[] {
   if (!Array.isArray(arr)) return [];
-  return Array.from(new Set(arr.map((s) => String(s).trim().slice(0, maxLen)).filter(Boolean))).slice(
-    0,
-    maxItems
-  );
+  return Array.from(
+    new Set(
+      arr
+        .map((s) => String(s).replace(/^#+/, '').trim().slice(0, maxLen))
+        .filter(Boolean)
+    )
+  ).slice(0, maxItems);
 }
 
 export async function ensureUserProfile(user: User): Promise<UserProfile> {
@@ -479,7 +482,7 @@ export async function updateCaseRecord(
         value: String(cf.value).slice(0, 300),
       }));
     }
-    if (updates.tags !== undefined) clean.tags = clampStringArray(updates.tags, 20, 60);
+    if (updates.tags !== undefined) clean.tags = clampStringArray(updates.tags, 20, 100);
     if (updates.publicSlug !== undefined) clean.publicSlug = slugify(updates.publicSlug);
     if (updates.isPublished !== undefined) clean.isPublished = updates.isPublished;
     if (updates.publicHeadline !== undefined)
@@ -1085,6 +1088,7 @@ export async function publishCaseToPublicSite(params: {
       coverUrl: (
         caseRecord.publicCoverUrl || '/assets/aistudio/kanhaiya-sharma-EiAqej-cGks-unsplash_c5de0270.jpg'
       ).slice(0, 500),
+      tags: clampStringArray(caseRecord.tags, 20, 100),
       customFields: (caseRecord.customFields || []).slice(0, 25),
       sections: sections
         .filter((s) => s.isPublic)

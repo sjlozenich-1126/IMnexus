@@ -215,6 +215,7 @@
         "subtitle": { "type": "string", "maxLength": 320 },
         "intro": { "type": "string", "maxLength": 8000 },
         "coverUrl": { "type": "string", "maxLength": 500 },
+        "tags": { "type": "array", "description": "Bounded up to 20 case tags for public Nexus mapping." },
         "customFields": { "type": "array" },
         "sections": { "type": "array" },
         "timeline": { "type": "array" },

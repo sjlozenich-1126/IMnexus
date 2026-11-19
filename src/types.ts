@@ -185,6 +185,7 @@ export interface PublicSite {
   subtitle?: string;
   intro?: string;
   coverUrl?: string;
+  tags?: string[];
   customFields?: CustomField[];
   sections?: Array<{ id: string; order: number; title: string; content: string }>;
   timeline?: Array<{ id: string; date: string; time?: string; title: string; description: string }>;
