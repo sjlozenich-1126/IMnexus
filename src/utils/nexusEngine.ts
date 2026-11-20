@@ -37,6 +37,7 @@ export interface NexusNode {
   fileName?: string;
   sha256?: string;
   textContent?: string;
+  embedUrl?: string;
   description?: string;
 }
 
@@ -110,6 +111,10 @@ function truncateLabel(text: string, max = 26): string {
 
 function normalizeToken(input: string): string {
   return input.replace(/^#+/, '').trim().toLowerCase();
+}
+
+function stripTagsQuick(html: string): string {
+  return (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function placeArc(
@@ -303,6 +308,7 @@ export function buildCaseNexus(params: {
     fileName?: string;
     sha256?: string;
     textContent?: string;
+    embedUrl?: string;
     description?: string;
     tags?: string[];
   }>;
@@ -650,6 +656,7 @@ export function buildCaseNexus(params: {
     fileName?: string;
     sha256?: string;
     textContent?: string;
+    embedUrl?: string;
     description?: string;
     tags: string[];
     bridgeEdges: NexusEdge[];
@@ -743,6 +750,7 @@ export function buildCaseNexus(params: {
         fileName: evItem.fileName,
         sha256: evItem.sha256,
         textContent: evItem.textContent,
+        embedUrl: evItem.embedUrl,
         description: evItem.description,
         tags: evItem.tags || [],
         bridgeEdges: bridges,
@@ -795,6 +803,7 @@ export function buildCaseNexus(params: {
       fileName: art.fileName,
       sha256: art.sha256,
       textContent: art.textContent,
+      embedUrl: art.embedUrl,
       description: art.description,
     });
     edges.push(...art.bridgeEdges);
@@ -890,7 +899,7 @@ export function buildCaseNexus(params: {
   }
 
   const narrativeCorroborations = params.sections.reduce((acc, s) => {
-    const body = `${s.title} ${s.content}`.toLowerCase();
+    const body = `${s.title} ${stripTagsQuick(s.content)}`.toLowerCase();
     return (
       acc +
       cappedActors.filter((a) => textMentionsToken(body, a.name)).length +
@@ -1195,6 +1204,7 @@ export function buildPortfolioNexus(params: {
       fileName: item.fileName,
       sha256: item.sha256,
       textContent: item.textContent,
+      embedUrl: item.embedUrl,
       description: item.description,
     });
 
@@ -1374,6 +1384,7 @@ export function buildSingleCaseFromWorkspace(params: {
       fileName: e.fileName,
       sha256: e.sha256,
       textContent: e.textContent,
+      embedUrl: e.embedUrl,
       description: e.description,
       tags: e.tags,
     }));

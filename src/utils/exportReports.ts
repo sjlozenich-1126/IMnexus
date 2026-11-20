@@ -10,6 +10,7 @@ import type {
   VaultItem,
 } from '../types';
 import { buildCaseNexus, buildPublicSiteNexus } from './nexusEngine';
+import { stripRichHtmlToPlainText } from '../components/RichTextEditor';
 
 export interface CustomReportOptions {
   reportTitle: string;
@@ -383,7 +384,11 @@ export function exportCasePdf(params: {
         ctx.setY(ctx.getY() + 14);
       }
       ctx.setY(ctx.getY() + 2);
-      drawParagraphs(sec.content?.trim() || 'No narrative recorded for this section.', 9.5, 13.5);
+      drawParagraphs(
+        stripRichHtmlToPlainText(sec.content)?.trim() || 'No narrative recorded for this section.',
+        9.5,
+        13.5
+      );
       ctx.setY(ctx.getY() + 10);
     }
   }
@@ -436,7 +441,7 @@ export function exportCasePdf(params: {
         e.mediaType.toUpperCase(),
         e.tags.join(', ') || '—',
         e.isPublic ? 'Public' : 'Private',
-        e.sha256 ? `${e.sha256.slice(0, 20)}…` : 'Text Note',
+        e.sha256 ? `${e.sha256.slice(0, 20)}…` : e.embedUrl ? 'Video Embed' : 'Text Note',
       ]),
       theme: 'grid',
       columnStyles: {
@@ -640,7 +645,7 @@ export function exportPublicSitePdf(site: PublicSite): void {
         ctx.setY(ctx.getY() + 14);
       }
       ctx.setY(ctx.getY() + 2);
-      drawParagraphs(sec.content || '', 9.5, 13.5);
+      drawParagraphs(stripRichHtmlToPlainText(sec.content || ''), 9.5, 13.5);
       ctx.setY(ctx.getY() + 10);
     }
   }
@@ -693,7 +698,7 @@ export function exportPublicSitePdf(site: PublicSite): void {
         e.title,
         e.mediaType.toUpperCase(),
         e.tags?.join(', ') || '—',
-        e.sha256 ? `${e.sha256.slice(0, 22)}…` : 'Text Exhibit',
+        e.sha256 ? `${e.sha256.slice(0, 22)}…` : e.embedUrl ? 'Video Embed' : 'Text Exhibit',
       ]),
       theme: 'grid',
       columnStyles: {
@@ -829,7 +834,14 @@ export function exportCaseCustomCsv(params: {
 
   if (options.includeNarrative) {
     for (const sec of sections.filter((s) => !options.publicOnly || s.isPublic)) {
-      rows.push(['Narrative Section', String(sec.order).padStart(2, '0'), sec.title, 'Section', sec.isPublic ? 'Public' : 'Private', sec.content]);
+      rows.push([
+        'Narrative Section',
+        String(sec.order).padStart(2, '0'),
+        sec.title,
+        'Section',
+        sec.isPublic ? 'Public' : 'Private',
+        stripRichHtmlToPlainText(sec.content),
+      ]);
     }
   }
 

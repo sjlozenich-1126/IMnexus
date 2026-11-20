@@ -853,6 +853,7 @@ export async function createVaultItem(params: {
   sha256?: string;
   encrypted: boolean;
   textContent?: string;
+  embedUrl?: string;
   caseIds: string[];
   tags: string[];
   isPublic: boolean;
@@ -882,6 +883,7 @@ export async function createVaultItem(params: {
     if (params.fileSize !== undefined) payload.fileSize = params.fileSize;
     if (params.sha256) payload.sha256 = params.sha256.slice(0, 128);
     if (params.textContent) payload.textContent = params.textContent.slice(0, 20000);
+    if (params.embedUrl) payload.embedUrl = params.embedUrl.slice(0, 1000);
 
     await setDoc(doc(db, 'vaultItems', id), payload);
     if (params.fileId) {
@@ -910,6 +912,7 @@ export async function updateVaultItem(
     category: VaultCategory;
     docType: string;
     textContent: string;
+    embedUrl: string;
     caseIds: string[];
     tags: string[];
     isPublic: boolean;
@@ -924,6 +927,7 @@ export async function updateVaultItem(
     if (updates.category !== undefined) clean.category = updates.category;
     if (updates.docType !== undefined) clean.docType = updates.docType.slice(0, 120);
     if (updates.textContent !== undefined) clean.textContent = updates.textContent.slice(0, 20000);
+    if (updates.embedUrl !== undefined) clean.embedUrl = updates.embedUrl.slice(0, 1000);
     if (updates.caseIds !== undefined) clean.caseIds = clampStringArray(updates.caseIds, 10, 128);
     if (updates.tags !== undefined) clean.tags = clampStringArray(updates.tags, 15, 60);
     if (updates.isPublic !== undefined) clean.isPublic = updates.isPublic;
@@ -1145,6 +1149,7 @@ export async function publishCaseToPublicSite(params: {
         mimeType: e.mimeType || '',
         sha256: e.sha256 || '',
         textContent: e.textContent || '',
+        embedUrl: e.embedUrl || '',
         description: e.description || '',
         tags: e.tags || [],
       })),
@@ -1169,6 +1174,7 @@ export async function publishCaseToPublicSite(params: {
               mimeType: item.mimeType || '',
               sha256: item.sha256 || '',
               textContent: item.textContent || '',
+              embedUrl: item.embedUrl || '',
               description: item.description || '',
             })),
         })),

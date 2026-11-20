@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Film,
   Globe,
   Layers,
   Network,
@@ -17,6 +18,7 @@ import {
   Upload,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 import type {
   CaseActor,
@@ -60,9 +62,12 @@ import {
   exportCasePdf,
 } from '../utils/exportReports';
 import { buildSingleCaseFromWorkspace } from '../utils/nexusEngine';
+import { parseVideoEmbed } from '../utils/mediaEmbed';
 import { inferMediaType, uploadEncryptedVaultFile } from '../utils/vaultApi';
 import { StatusLabel } from './BrandMark';
+import { EmbeddedVideoFrame } from './EmbeddedVideoFrame';
 import { NexusMapView } from './NexusMapView';
+import { RichTextContent, RichTextEditor } from './RichTextEditor';
 
 type CaseTab =
   | 'overview'
@@ -175,6 +180,15 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
 
   const [collabEmail, setCollabEmail] = useState('');
   const [collabRole, setCollabRole] = useState<CaseCollaboratorRole>('editor');
+
+  const [showEmbedForm, setShowEmbedForm] = useState(false);
+  const [embedTitle, setEmbedTitle] = useState('');
+  const [embedUrlInput, setEmbedUrlInput] = useState('');
+  const [embedDesc, setEmbedDesc] = useState('');
+  const [embedTagsInput, setEmbedTagsInput] = useState('');
+  const [embedPublic, setEmbedPublic] = useState(true);
+  const [embedSaving, setEmbedSaving] = useState(false);
+  const [expandedEmbedId, setExpandedEmbedId] = useState<string | null>(null);
 
   const coverFileRef = useRef<HTMLInputElement>(null);
   const quickDocRef = useRef<HTMLInputElement>(null);
@@ -1343,23 +1357,27 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                         </div>
 
                         {isEditing && canEdit ? (
-                          <textarea
-                            rows={6}
-                            defaultValue={sec.content}
-                            onBlur={(e) => {
-                              if (e.target.value !== sec.content) {
-                                void updateCaseSection(caseRecord.id, sec.id, {
-                                  content: e.target.value,
-                                }).catch((err) => setSaveError(formatWriteError(err)));
+                          <RichTextEditor
+                            sectionId={sec.id}
+                            initialContent={sec.content}
+                            placeholder="Write formatted case narrative, legal analysis, bold headings, bullet points, blockquotes, or factual findings…"
+                            onSave={async (formattedHtml) => {
+                              try {
+                                await updateCaseSection(caseRecord.id, sec.id, {
+                                  content: formattedHtml,
+                                });
+                                showFlash('Formatted section saved.');
+                              } catch (err) {
+                                setSaveError(formatWriteError(err));
                               }
                             }}
-                            placeholder="Write section narrative, legal analysis, or factual findings…"
-                            className="w-full px-3 py-2 text-[13px] bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
                           />
                         ) : (
-                          <p className="text-xs text-[#6a716b] dark:text-[#c4bfb4] leading-relaxed whitespace-pre-line">
-                            {sec.content || 'Empty section — click Edit to add content.'}
-                          </p>
+                          <RichTextContent
+                            content={sec.content}
+                            emptyFallback="Empty section — click Edit to add formatted content."
+                            className="text-[13px] text-[#2b302c] dark:text-[#d5d0c5] leading-relaxed"
+                          />
                         )}
                       </div>
                     );
@@ -1460,7 +1478,7 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-[13px] font-semibold">Case Evidence &amp; Collections</h3>
                 {canEdit && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {unlinkedEvidence.length > 0 && (
                       <select
                         defaultValue=""
@@ -1485,6 +1503,14 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                     )}
                     <button
                       type="button"
+                      onClick={() => setShowEmbedForm((prev) => !prev)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] cursor-pointer"
+                    >
+                      <Film className="w-3.5 h-3.5" />
+                      <span>{showEmbedForm ? 'Cancel Embed' : '+ Embed Video'}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => quickEvRef.current?.click()}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
                     >
@@ -1503,6 +1529,118 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                   </div>
                 )}
               </div>
+
+              {showEmbedForm && canEdit && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const parsed = parseVideoEmbed(embedUrlInput);
+                    if (!parsed || !embedTitle.trim()) {
+                      setSaveError('Provide a title and a valid HTTPS video URL or <iframe> embed snippet.');
+                      return;
+                    }
+                    setEmbedSaving(true);
+                    setSaveError(null);
+                    try {
+                      const tags = parseTagsInput(embedTagsInput);
+                      await createVaultItem({
+                        ownerId: userId,
+                        actorName: userName,
+                        title: embedTitle.trim(),
+                        description: embedDesc.trim() || undefined,
+                        category: 'evidence',
+                        mediaType: 'video',
+                        docType: `${parsed.provider} Video`,
+                        encrypted: false,
+                        embedUrl: parsed.embedUrl,
+                        caseIds: [caseRecord.id],
+                        tags,
+                        isPublic: embedPublic,
+                      });
+                      setEmbedTitle('');
+                      setEmbedUrlInput('');
+                      setEmbedDesc('');
+                      setEmbedTagsInput('');
+                      setShowEmbedForm(false);
+                      showFlash('Embedded video linked to case evidence.');
+                    } catch (err) {
+                      setSaveError(formatWriteError(err));
+                    } finally {
+                      setEmbedSaving(false);
+                    }
+                  }}
+                  className="p-4 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-[#ef4423]" />
+                      <span>Embed Video Exhibit (URL or &lt;iframe&gt; Code)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmbedForm(false)}
+                      className="p-1 text-[#6a716b] hover:text-[#0f1210] cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      required
+                      value={embedTitle}
+                      onChange={(e) => setEmbedTitle(e.target.value)}
+                      placeholder="Video exhibit title *"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={embedTagsInput}
+                      onChange={(e) => setEmbedTagsInput(e.target.value)}
+                      placeholder="Tags (comma-separated)"
+                      className="px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                    />
+                  </div>
+                  <textarea
+                    rows={2}
+                    required
+                    value={embedUrlInput}
+                    onChange={(e) => setEmbedUrlInput(e.target.value)}
+                    placeholder="Paste YouTube, Vimeo, Loom, Google Drive URL, .mp4 link, or <iframe src='...'> embed code"
+                    className="w-full px-2.5 py-1.5 text-xs font-mono-tabular bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                  />
+                  {embedUrlInput.trim() && (
+                    <EmbeddedVideoFrame
+                      embedUrl={embedUrlInput}
+                      title={embedTitle || 'Video Preview'}
+                    />
+                  )}
+                  <input
+                    type="text"
+                    value={embedDesc}
+                    onChange={(e) => setEmbedDesc(e.target.value)}
+                    placeholder="Optional contextual description or timestamp notes"
+                    className="w-full px-2.5 py-1.5 text-xs bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={embedPublic}
+                        onChange={(e) => setEmbedPublic(e.target.checked)}
+                      />
+                      <span>Visible on published Public Site</span>
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={embedSaving}
+                      className="px-3.5 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] disabled:opacity-50 cursor-pointer"
+                    >
+                      {embedSaving ? 'Saving…' : 'Add Video Exhibit'}
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {linkedCollections.length > 0 && (
                 <div>
@@ -1535,31 +1673,49 @@ export const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({
                 <p className="text-xs text-[#6a716b]">No evidence items linked to this case yet.</p>
               ) : (
                 <div className="divide-y divide-[#e9e5db] dark:divide-[#242924]">
-                  {linkedEvidence.map((item) => (
-                    <div key={item.id} className="py-3 flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="text-[13px] font-medium truncate">{item.title}</div>
-                        <div className="text-[11px] text-[#6a716b] font-mono-tabular">
-                          {item.mediaType.toUpperCase()}
-                          {item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
+                  {linkedEvidence.map((item) => {
+                    const isVideoOpen = expandedEmbedId === item.id;
+                    return (
+                      <div key={item.id} className="py-3 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[13px] font-medium truncate">{item.title}</div>
+                            <div className="text-[11px] text-[#6a716b] font-mono-tabular">
+                              {item.mediaType.toUpperCase()}
+                              {item.embedUrl ? ' · EMBEDDED VIDEO' : ''}
+                              {item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.embedUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedEmbedId(isVideoOpen ? null : item.id)}
+                                className="px-2 py-1 text-[11px] font-medium border border-[#ef4423]/50 text-[#ef4423] dark:text-[#ff6b3d] cursor-pointer"
+                              >
+                                {isVideoOpen ? 'Hide Player' : 'Play Video'}
+                              </button>
+                            )}
+                            <StatusLabel status={item.isPublic ? 'Public' : 'Private'} />
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void updateVaultItem(item, { isPublic: !item.isPublic })
+                                }
+                                className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
+                              >
+                                {item.isPublic ? 'Make Private' : 'Make Public'}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <StatusLabel status={item.isPublic ? 'Public' : 'Private'} />
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void updateVaultItem(item, { isPublic: !item.isPublic })
-                            }
-                            className="px-2 py-1 text-[11px] font-medium border border-[#ddd8ce] dark:border-[#262b27] cursor-pointer"
-                          >
-                            {item.isPublic ? 'Make Private' : 'Make Public'}
-                          </button>
+                        {isVideoOpen && item.embedUrl && (
+                          <EmbeddedVideoFrame embedUrl={item.embedUrl} title={item.title} />
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

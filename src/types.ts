@@ -111,6 +111,7 @@ export interface VaultItem {
   sha256?: string;
   encrypted: boolean;
   textContent?: string;
+  embedUrl?: string;
   caseIds: string[];
   tags: string[];
   isPublic: boolean;
@@ -154,6 +155,7 @@ export interface PublicSiteCollectionItem {
   mimeType?: string;
   sha256?: string;
   textContent?: string;
+  embedUrl?: string;
   description?: string;
 }
 
@@ -210,6 +212,7 @@ export interface PublicSite {
     mimeType?: string;
     sha256?: string;
     textContent?: string;
+    embedUrl?: string;
     description?: string;
     tags: string[];
   }>;

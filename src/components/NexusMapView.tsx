@@ -25,6 +25,7 @@ interface NexusMapViewProps {
   onSelectCaseId?: (caseId: string) => void;
   onInspectNodeArtifact?: (node: NexusNode) => void;
   compact?: boolean;
+  accentVariant?: 'forest' | 'ember';
 }
 
 type NexusViewMode = 'constellation' | 'matrix' | 'chronology';
@@ -70,7 +71,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
   onSelectCaseId,
   onInspectNodeArtifact,
   compact = false,
+  accentVariant = 'forest',
 }) => {
+  const isEmber = accentVariant === 'ember';
   const [viewMode, setViewMode] = useState<NexusViewMode>('constellation');
   const [kindFilter, setKindFilter] = useState<'core' | 'all' | NexusNodeKind>('core');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
@@ -226,7 +229,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#0f1210] dark:text-[#f3f0e9]">
-            <GitFork className="w-3.5 h-3.5 text-[#1a2e24] dark:text-[#7fb892]" />
+            <GitFork
+              className={`w-3.5 h-3.5 ${
+                isEmber ? 'text-[#ef4423] dark:text-[#ff6b3d]' : 'text-[#1a2e24] dark:text-[#7fb892]'
+              }`}
+            />
             <span>{graph.title}</span>
           </div>
           {subtitle && (
@@ -289,7 +296,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
             onClick={() => setKindFilter('core')}
             className={`px-2.5 py-1 text-[11px] font-medium border transition-colors cursor-pointer whitespace-nowrap ${
               kindFilter === 'core'
-                ? 'bg-[#1a2e24] text-[#faf8f4] border-[#1a2e24] dark:bg-[#7fb892] dark:text-[#0c0e0c] dark:border-[#7fb892]'
+                ? isEmber
+                  ? 'bg-[#ef4423] text-white border-[#ef4423] dark:bg-[#ff6b3d] dark:text-[#0c0e0c] dark:border-[#ff6b3d]'
+                  : 'bg-[#1a2e24] text-[#faf8f4] border-[#1a2e24] dark:bg-[#7fb892] dark:text-[#0c0e0c] dark:border-[#7fb892]'
                 : 'bg-[#faf8f4] dark:bg-[#161916] text-[#6a716b] dark:text-[#8d948e] border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210]'
             }`}
           >
@@ -385,7 +394,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                     }}
                     className={`px-2 py-1 text-[11px] font-medium border transition-colors cursor-pointer whitespace-nowrap ${
                       isActive
-                        ? 'bg-[#1a2e24] text-[#faf8f4] border-[#1a2e24] dark:bg-[#7fb892] dark:text-[#0c0e0c] dark:border-[#7fb892]'
+                        ? isEmber
+                          ? 'bg-[#ef4423] text-white border-[#ef4423] dark:bg-[#ff6b3d] dark:text-[#0c0e0c] dark:border-[#ff6b3d]'
+                          : 'bg-[#1a2e24] text-[#faf8f4] border-[#1a2e24] dark:bg-[#7fb892] dark:text-[#0c0e0c] dark:border-[#7fb892]'
                         : 'bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#6a716b] dark:text-[#8d948e] border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210]'
                     }`}
                   >
@@ -506,7 +517,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                       strokeDasharray={edge.strength === 1 ? '4 3' : undefined}
                       className={
                         isHighlighted
-                          ? 'stroke-[#1a2e24] dark:stroke-[#7fb892] transition-opacity duration-150'
+                          ? isEmber
+                            ? 'stroke-[#ef4423] dark:stroke-[#ff6b3d] transition-opacity duration-150'
+                            : 'stroke-[#1a2e24] dark:stroke-[#7fb892] transition-opacity duration-150'
                           : isDimmed
                           ? 'stroke-[#ddd8ce]/40 dark:stroke-[#262b27]/40 transition-opacity duration-150'
                           : 'stroke-[#c9c3b6] dark:stroke-[#323833] transition-opacity duration-150'
@@ -557,9 +570,13 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                           strokeWidth={node.kind === 'case' ? 1.8 : 1.4}
                           className={
                             node.kind === 'case'
-                              ? 'fill-[#1a2e24] stroke-[#0f1210] dark:fill-[#f3f0e9] dark:stroke-[#f3f0e9]'
+                              ? isEmber
+                                ? 'fill-[#ef4423] stroke-[#0f1210] dark:fill-[#ff6b3d] dark:stroke-[#f3f0e9]'
+                                : 'fill-[#1a2e24] stroke-[#0f1210] dark:fill-[#f3f0e9] dark:stroke-[#f3f0e9]'
                               : node.kind === 'tag'
                               ? 'fill-[#faf8f4] stroke-[#8b3a3a] dark:fill-[#1c1515] dark:stroke-[#d17b7b]'
+                              : isEmber
+                              ? 'fill-[#e9e5db] stroke-[#ef4423] dark:fill-[#1c211d] dark:stroke-[#ff6b3d]'
                               : 'fill-[#e9e5db] stroke-[#1a2e24] dark:fill-[#1c211d] dark:stroke-[#a8c4b0]'
                           }
                         />
@@ -572,7 +589,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                           strokeWidth="1.35"
                           className={
                             node.kind === 'metadata'
-                              ? 'fill-[#faf8f4] stroke-[#2d5a3d] dark:fill-[#151c17] dark:stroke-[#7fb892]'
+                              ? isEmber
+                                ? 'fill-[#faf8f4] stroke-[#ef4423] dark:fill-[#1c1514] dark:stroke-[#ff6b3d]'
+                                : 'fill-[#faf8f4] stroke-[#2d5a3d] dark:fill-[#151c17] dark:stroke-[#7fb892]'
                               : node.kind === 'timeline'
                               ? 'fill-[#faf8f4] stroke-[#7a642e] dark:fill-[#161916] dark:stroke-[#d4bc7d]'
                               : 'fill-[#faf8f4] stroke-[#6a716b] dark:fill-[#161916] dark:stroke-[#9ca39d]'
@@ -584,7 +603,9 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                           strokeWidth="1.35"
                           className={
                             node.kind === 'actor'
-                              ? 'fill-[#faf8f4] stroke-[#2d5a3d] dark:fill-[#161916] dark:stroke-[#7fb892]'
+                              ? isEmber
+                                ? 'fill-[#faf8f4] stroke-[#ef4423] dark:fill-[#161916] dark:stroke-[#ff6b3d]'
+                                : 'fill-[#faf8f4] stroke-[#2d5a3d] dark:fill-[#161916] dark:stroke-[#7fb892]'
                               : 'fill-[#f3f0e9] stroke-[#0f1210] dark:fill-[#1e2420] dark:stroke-[#d8d3c8]'
                           }
                         />
@@ -738,22 +759,33 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                                   cell ? 'cursor-pointer' : 'text-[#6a716b]/40'
                                 } ${
                                   isCellSelected
-                                    ? 'ring-2 ring-inset ring-[#1a2e24] dark:ring-[#f3f0e9]'
+                                    ? isEmber
+                                      ? 'ring-2 ring-inset ring-[#ef4423] dark:ring-[#ff6b3d]'
+                                      : 'ring-2 ring-inset ring-[#1a2e24] dark:ring-[#f3f0e9]'
                                     : ''
                                 }`}
                                 style={
                                   cell
                                     ? {
-                                        backgroundColor:
-                                          intensity > 0.65
-                                            ? 'rgba(26, 46, 36, 0.22)'
-                                            : 'rgba(45, 90, 61, 0.11)',
+                                        backgroundColor: isEmber
+                                          ? intensity > 0.65
+                                            ? 'rgba(239, 68, 35, 0.24)'
+                                            : 'rgba(255, 107, 61, 0.12)'
+                                          : intensity > 0.65
+                                          ? 'rgba(26, 46, 36, 0.22)'
+                                          : 'rgba(45, 90, 61, 0.11)',
                                       }
                                     : undefined
                                 }
                               >
                                 {cell ? (
-                                  <span className="inline-block font-semibold text-[#1a2e24] dark:text-[#7fb892]">
+                                  <span
+                                    className={`inline-block font-semibold ${
+                                      isEmber
+                                        ? 'text-[#ef4423] dark:text-[#ff6b3d]'
+                                        : 'text-[#1a2e24] dark:text-[#7fb892]'
+                                    }`}
+                                  >
                                     {cell.score}
                                   </span>
                                 ) : (
@@ -874,7 +906,13 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                         gridTemplateColumns: `110px repeat(${graph.chronology.length}, minmax(135px, 1fr))`,
                       }}
                     >
-                      <div className="text-[10px] uppercase tracking-[0.1em] text-[#2d5a3d] dark:text-[#7fb892] pt-1 font-medium">
+                      <div
+                        className={`text-[10px] uppercase tracking-[0.1em] pt-1 font-medium ${
+                          isEmber
+                            ? 'text-[#ef4423] dark:text-[#ff6b3d]'
+                            : 'text-[#2d5a3d] dark:text-[#7fb892]'
+                        }`}
+                      >
                         Metadata
                       </div>
                       {graph.chronology.map((pt) => (
@@ -893,7 +931,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                                   key={nid}
                                   type="button"
                                   onClick={() => setSelectedNodeId(nid)}
-                                  className="block w-full text-left px-1.5 py-0.5 text-[11px] border border-[#2d5a3d]/30 text-[#1a2e24] dark:text-[#7fb892] hover:border-[#2d5a3d] truncate cursor-pointer"
+                                  className={`block w-full text-left px-1.5 py-0.5 text-[11px] border truncate cursor-pointer ${
+                                    isEmber
+                                      ? 'border-[#ef4423]/35 text-[#ef4423] dark:text-[#ff6b3d] hover:border-[#ef4423]'
+                                      : 'border-[#2d5a3d]/30 text-[#1a2e24] dark:text-[#7fb892] hover:border-[#2d5a3d]'
+                                  }`}
                                 >
                                   {n.label}
                                 </button>
@@ -962,7 +1004,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
           {selectedMatrixCell && viewMode === 'matrix' ? (
             <div className="space-y-4">
               <div className="pb-3 border-b border-[#e9e5db] dark:border-[#242924]">
-                <div className="text-[10px] uppercase tracking-[0.1em] text-[#2d5a3d] dark:text-[#7fb892] mb-1">
+                <div
+                  className={`text-[10px] uppercase tracking-[0.1em] mb-1 ${
+                    isEmber ? 'text-[#ef4423] dark:text-[#ff6b3d]' : 'text-[#2d5a3d] dark:text-[#7fb892]'
+                  }`}
+                >
                   Axis Intersection · {selectedMatrixCell.score} link
                   {selectedMatrixCell.score === 1 ? '' : 's'}
                 </div>
@@ -1137,7 +1183,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.1em] text-[#6a716b] dark:text-[#8d948e] mb-1">
-                  <Icon className="w-3 h-3 text-[#2d5a3d] dark:text-[#7fb892]" />
+                  <Icon
+                    className={`w-3 h-3 ${
+                      isEmber ? 'text-[#ef4423] dark:text-[#ff6b3d]' : 'text-[#2d5a3d] dark:text-[#7fb892]'
+                    }`}
+                  />
                   <span>{ins.category}</span>
                 </div>
                 <div className="text-xs font-semibold text-[#0f1210] dark:text-[#f3f0e9] mb-1">

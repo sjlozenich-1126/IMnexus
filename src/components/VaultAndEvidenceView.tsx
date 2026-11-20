@@ -39,13 +39,18 @@ import {
   uploadEncryptedVaultFile,
 } from '../utils/vaultApi';
 import { StatusLabel } from './BrandMark';
+import { EmbeddedVideoFrame } from './EmbeddedVideoFrame';
 import { VaultDownloadLink, VaultImage, useResolvedVaultUrl } from './VaultMedia';
+import { parseVideoEmbed } from '../utils/mediaEmbed';
 
 const VaultItemPreviewStage: React.FC<{ item: VaultItem }> = ({ item }) => {
   const { url, loading, error } = useResolvedVaultUrl(item.fileId);
 
   return (
     <div className="lg:col-span-7 space-y-3">
+      {item.embedUrl && (
+        <EmbeddedVideoFrame embedUrl={item.embedUrl} title={item.title} />
+      )}
       {item.fileId && item.mediaType !== 'text' && loading && (
         <div className="p-8 bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] text-center text-xs text-[#6a716b]">
           Decrypting AES-256-GCM asset from cloud vault…
@@ -138,11 +143,13 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
   const [uploadTags, setUploadTags] = useState('');
   const [uploadCaseIds, setUploadCaseIds] = useState<string[]>([]);
   const [uploadIsPublic, setUploadIsPublic] = useState(false);
-  const [uploadMode, setUploadMode] = useState<'file' | 'note'>('file');
+  const [uploadMode, setUploadMode] = useState<'file' | 'note' | 'embed'>('file');
+  const [uploadEmbedUrl, setUploadEmbedUrl] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingEmbedUrl, setEditingEmbedUrl] = useState('');
 
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [editingCollection, setEditingCollection] = useState<EvidenceCollection | null>(null);
@@ -234,7 +241,26 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
         .map((t) => t.trim())
         .filter(Boolean);
 
-      if (uploadMode === 'note') {
+      if (uploadMode === 'embed') {
+        const parsed = parseVideoEmbed(uploadEmbedUrl);
+        if (!uploadTitle.trim() || !parsed) {
+          throw new Error('Title and a valid video URL or iframe embed snippet are required.');
+        }
+        await createVaultItem({
+          ownerId: userId,
+          actorName: userName,
+          title: uploadTitle.trim(),
+          description: uploadDescription.trim() || undefined,
+          category,
+          mediaType: 'video',
+          docType: uploadDocType.trim() || `${parsed.provider} Video`,
+          encrypted: false,
+          embedUrl: parsed.embedUrl,
+          caseIds: uploadCaseIds,
+          tags,
+          isPublic: uploadIsPublic,
+        });
+      } else if (uploadMode === 'note') {
         if (!uploadTitle.trim() || !uploadTextContent.trim()) {
           throw new Error('Title and note content are required.');
         }
@@ -291,6 +317,7 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
       setUploadDocType('');
       setUploadDescription('');
       setUploadTextContent('');
+      setUploadEmbedUrl('');
       setUploadTags('');
       setUploadCaseIds([]);
       setUploadIsPublic(false);
@@ -380,17 +407,32 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
             </span>
           </button>
           {canEdit && (
-            <button
-              type="button"
-              onClick={() => {
-                setUploadMode('file');
-                setShowUploadModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 transition-opacity whitespace-nowrap cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{mode === 'documents' ? 'Upload Documents' : 'Add Evidence'}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadError(null);
+                  setUploadMode('embed');
+                  setShowUploadModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#ddd8ce] dark:border-[#262b27] bg-transparent hover:border-[#0f1210] transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <Film className="w-3.5 h-3.5" />
+                <span>Embed Video</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadError(null);
+                  setUploadMode('file');
+                  setShowUploadModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] hover:opacity-85 transition-opacity whitespace-nowrap cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{mode === 'documents' ? 'Upload Documents' : 'Add Evidence'}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -574,7 +616,10 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                   <tr
                     key={docItem.id}
                     className="hover:bg-white/60 dark:hover:bg-white/[0.03] cursor-pointer"
-                    onClick={() => setActiveItem(docItem)}
+                    onClick={() => {
+                      setActiveItem(docItem);
+                      setEditingEmbedUrl(docItem.embedUrl || '');
+                    }}
                   >
                     <td
                       className="py-2.5 px-3.5"
@@ -628,7 +673,10 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
             return (
               <div
                 key={item.id}
-                onClick={() => setActiveItem(item)}
+                onClick={() => {
+                  setActiveItem(item);
+                  setEditingEmbedUrl(item.embedUrl || '');
+                }}
                 className={`group bg-[#faf8f4] dark:bg-[#161916] border overflow-hidden transition-colors cursor-pointer ${
                   isSelected
                     ? 'border-[#1a2e24] ring-1 ring-[#1a2e24] dark:border-[#7fb892] dark:ring-[#7fb892]'
@@ -663,10 +711,31 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                       className="w-full h-full object-cover"
                     />
                   ) : item.mediaType === 'video' ? (
-                    <div className="w-full h-full bg-[#1a1f1c] flex flex-col items-center justify-center text-white/50 gap-1">
-                      <Film className="w-6 h-6" />
-                      <span className="text-[10px] uppercase tracking-wider">Video</span>
-                    </div>
+                    (() => {
+                      const parsedEmbed = item.embedUrl ? parseVideoEmbed(item.embedUrl) : null;
+                      return parsedEmbed?.thumbnailUrl ? (
+                        <div className="w-full h-full relative">
+                          <img
+                            src={parsedEmbed.thumbnailUrl}
+                            alt={item.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                            <span className="px-2 py-1 text-[10px] font-mono-tabular uppercase tracking-wider bg-[#ef4423] text-white font-semibold">
+                              ▶ {parsedEmbed.provider}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-full bg-[#1a1f1c] flex flex-col items-center justify-center text-white/75 gap-1">
+                          <Film className="w-6 h-6 text-[#ff6b3d]" />
+                          <span className="text-[10px] uppercase tracking-wider font-mono-tabular">
+                            {parsedEmbed ? `${parsedEmbed.provider} Embed` : 'Video'}
+                          </span>
+                        </div>
+                      );
+                    })()
                   ) : item.mediaType === 'audio' ? (
                     <div className="flex flex-col items-center justify-center text-[#6a716b] gap-1">
                       <Music className="w-6 h-6" />
@@ -738,22 +807,33 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
             </div>
 
             <form onSubmit={handleUploadSubmit} className="p-5 space-y-4">
-              <div className="flex gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setUploadMode('file')}
-                  className={`flex-1 py-2 text-xs font-medium border cursor-pointer ${
+                  className={`py-2 px-2 text-xs font-medium border cursor-pointer ${
                     uploadMode === 'file'
                       ? 'bg-[#0f1210] text-[#faf8f4] border-[#0f1210] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
                       : 'border-[#ddd8ce] dark:border-[#262b27] text-[#6a716b]'
                   }`}
                 >
-                  Upload File (PDF, Video, Audio, Image)
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadMode('embed')}
+                  className={`py-2 px-2 text-xs font-medium border cursor-pointer ${
+                    uploadMode === 'embed'
+                      ? 'bg-[#0f1210] text-[#faf8f4] border-[#0f1210] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                      : 'border-[#ddd8ce] dark:border-[#262b27] text-[#6a716b]'
+                  }`}
+                >
+                  Video / Media Embed
                 </button>
                 <button
                   type="button"
                   onClick={() => setUploadMode('note')}
-                  className={`flex-1 py-2 text-xs font-medium border cursor-pointer ${
+                  className={`py-2 px-2 text-xs font-medium border cursor-pointer ${
                     uploadMode === 'note'
                       ? 'bg-[#0f1210] text-[#faf8f4] border-[#0f1210] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
                       : 'border-[#ddd8ce] dark:border-[#262b27] text-[#6a716b]'
@@ -800,6 +880,33 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                       }}
                     />
                   </div>
+                </div>
+              ) : uploadMode === 'embed' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
+                      Video URL or &lt;iframe&gt; Embed Code *
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={uploadEmbedUrl}
+                      onChange={(e) => setUploadEmbedUrl(e.target.value)}
+                      required
+                      placeholder="Paste YouTube, Vimeo, Loom, Google Drive link, direct .mp4 URL, or <iframe src='...'> embed code"
+                      className="w-full px-3 py-2 text-xs font-mono-tabular bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                    />
+                  </div>
+                  {uploadEmbedUrl.trim() && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
+                        Live Embed Preview
+                      </div>
+                      <EmbeddedVideoFrame
+                        embedUrl={uploadEmbedUrl}
+                        title={uploadTitle || 'Video Preview'}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -1103,7 +1210,8 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
             <div className="px-5 py-3.5 border-b border-[#ddd8ce] dark:border-[#262b27] flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[10px] font-mono-tabular uppercase tracking-[0.08em] text-[#2d5a3d] dark:text-[#7fb892]">
-                  {activeItem.category} · {activeItem.mediaType} · AES-256-GCM Encrypted
+                  {activeItem.category} · {activeItem.mediaType} ·{' '}
+                  {activeItem.embedUrl ? 'Embedded Stream' : 'AES-256-GCM Encrypted'}
                 </div>
                 <h3 className="text-sm font-semibold truncate">{activeItem.title}</h3>
               </div>
@@ -1141,6 +1249,36 @@ export const VaultAndEvidenceView: React.FC<VaultAndEvidenceViewProps> = ({
                     )}
                   </div>
                 </div>
+
+                {activeItem.embedUrl && canEdit && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.08em] text-[#6a716b] mb-1">
+                      Video / Media Embed URL
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editingEmbedUrl}
+                        onChange={(e) => setEditingEmbedUrl(e.target.value)}
+                        placeholder="Paste video URL or <iframe> embed code"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 text-xs font-mono-tabular bg-[#f3f0e9] dark:bg-[#0c0e0c] border border-[#ddd8ce] dark:border-[#262b27] outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const parsed = parseVideoEmbed(editingEmbedUrl);
+                          if (!parsed) return;
+                          await updateVaultItem(activeItem, { embedUrl: parsed.embedUrl });
+                          setActiveItem({ ...activeItem, embedUrl: parsed.embedUrl });
+                          setEditingEmbedUrl(parsed.embedUrl);
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-[#0f1210] dark:bg-[#f3f0e9] text-[#faf8f4] dark:text-[#0f1210] cursor-pointer"
+                      >
+                        Update
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {activeItem.description && (
                   <div>

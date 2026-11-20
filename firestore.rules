@@ -179,7 +179,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'id', 'title', 'description', 'category', 'mediaType', 'docType',
           'fileId', 'fileName', 'mimeType', 'fileSize', 'sha256', 'encrypted',
-          'textContent', 'caseIds', 'tags', 'isPublic', 'ownerId', 'memberUids',
+          'textContent', 'embedUrl', 'caseIds', 'tags', 'isPublic', 'ownerId', 'memberUids',
           'createdAt', 'updatedAt'
         ])
         && isValidId(data.id) && data.id == itemId
@@ -195,6 +195,7 @@ service cloud.firestore {
         && (!('sha256' in data) || (data.sha256 is string && data.sha256.size() <= 128))
         && data.encrypted is bool
         && (!('textContent' in data) || (data.textContent is string && data.textContent.size() <= 20000))
+        && (!('embedUrl' in data) || (data.embedUrl is string && data.embedUrl.size() <= 1000))
         && isBoundedStringList(data.caseIds, 10)
         && isBoundedStringList(data.tags, 15)
         && data.isPublic is bool
@@ -518,7 +519,7 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (isAdmin() || existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids)
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'title', 'description', 'category', 'docType', 'textContent',
+          'title', 'description', 'category', 'docType', 'textContent', 'embedUrl',
           'caseIds', 'tags', 'isPublic', 'memberUids', 'updatedAt'
         ]);
       allow delete: if isValidId(itemId) && isVerifiedUser() && (isAdmin() || existing().ownerId == request.auth.uid);

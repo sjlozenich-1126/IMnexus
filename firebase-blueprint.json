@@ -147,6 +147,7 @@
         "sha256": { "type": "string", "maxLength": 128 },
         "encrypted": { "type": "boolean" },
         "textContent": { "type": "string", "maxLength": 20000 },
+        "embedUrl": { "type": "string", "maxLength": 1000 },
         "caseIds": { "type": "array", "description": "Bounded up to 10 linked case IDs." },
         "tags": { "type": "array", "description": "Bounded up to 15 tags." },
         "isPublic": { "type": "boolean" },
