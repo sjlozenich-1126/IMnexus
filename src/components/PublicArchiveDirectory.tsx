@@ -20,9 +20,15 @@ import {
 import type { MediaType, PublicSite } from '../types';
 import { fetchAllPublishedSites } from '../services/firestoreService';
 import { parseVideoEmbed } from '../utils/mediaEmbed';
+import {
+  buildPublicPortfolioNexus,
+  buildStratigraphicMap,
+  type StratigraphicCaseInput,
+} from '../utils/nexusEngine';
 import { formatBytes } from '../utils/vaultApi';
 import { BrandMark, StatusLabel } from './BrandMark';
 import { EmbeddedVideoFrame } from './EmbeddedVideoFrame';
+import { NexusMapView, type SelectableNexusCase } from './NexusMapView';
 import { PublicTipBox } from './PublicTipBox';
 import { stripRichHtmlToPlainText } from './RichTextEditor';
 import { VaultDownloadLink, VaultImage, useResolvedVaultUrl } from './VaultMedia';
@@ -137,12 +143,16 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [previewArtifact, setPreviewArtifact] = useState<AggregatedArtifact | null>(null);
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
 
   useEffect(() => {
     let mounted = true;
     fetchAllPublishedSites()
       .then((res) => {
-        if (mounted) setSites(res);
+        if (mounted) {
+          setSites(res);
+          setSelectedSlugs(res.map((s) => s.slug));
+        }
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -280,6 +290,48 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
   const leadCase = publishedCases[0] || null;
   const secondaryCases = publishedCases.slice(1);
 
+  const selectableCases = useMemo<SelectableNexusCase[]>(
+    () =>
+      sites.map((s) => ({
+        id: s.slug,
+        caseNumber: s.caseNumber || s.slug,
+        title: s.headline || s.title,
+        status: s.status,
+        caseType: s.caseType,
+      })),
+    [sites]
+  );
+
+  const publicNexusGraph = useMemo(
+    () => buildPublicPortfolioNexus({ sites, selectedSlugs }),
+    [sites, selectedSlugs]
+  );
+
+  const publicStratigraphicData = useMemo(() => {
+    const inputs: StratigraphicCaseInput[] = sites
+      .filter((s) => selectedSlugs.includes(s.slug))
+      .map((s) => ({
+        id: s.caseId || s.slug,
+        slug: s.slug,
+        caseNumber: s.caseNumber || s.slug,
+        title: s.headline || s.title,
+        status: s.status,
+        court: s.court,
+        arrestDates: s.arrestDates,
+        closureDate: s.closureDate,
+        tags: s.tags,
+        earliestTimelineDate: s.timeline?.[0]?.date,
+        sections: s.sections || [],
+      }));
+    return buildStratigraphicMap(inputs);
+  }, [sites, selectedSlugs]);
+
+  const toggleNexusSlug = (slug: string) => {
+    setSelectedSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((x) => x !== slug) : [...prev, slug]
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#0f1210] dark:text-[#f3f0e9]">
       {/* Vivid Top Accent Line */}
@@ -327,10 +379,11 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
             {[
               ['#overview', '01 · Overview'],
               ['#cases', `02 · Cases (${publishedCases.length})`],
-              ['#evidence', `03 · Evidence (${allEvidence.length})`],
-              ['#projects', `04 · Projects (${publishedProjects.length})`],
-              ['#documents', `05 · Documents (${allDocuments.length})`],
-              ['#tips', '06 · Send Tip'],
+              ['#nexus', '03 · Nexus Map'],
+              ['#evidence', `04 · Evidence (${allEvidence.length})`],
+              ['#projects', `05 · Projects (${publishedProjects.length})`],
+              ['#documents', `06 · Documents (${allDocuments.length})`],
+              ['#tips', '07 · Send Tip'],
             ].map(([href, label]) => (
               <a
                 key={href}
@@ -586,12 +639,80 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
           )}
         </section>
 
-        {/* SECTION 3: EVIDENCE */}
+        {/* SECTION 3: CROSS-CASE NEXUS, KUMU SYSTEMIC & STRATIGRAPHIC MAPPING */}
+        <section id="nexus" className="space-y-6 pt-4 border-t border-[#ddd8ce] dark:border-[#262b27]">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#ddd8ce] dark:border-[#262b27] pb-4">
+            <div>
+              <div className="font-mono-tabular text-[11px] font-semibold uppercase tracking-[0.14em] text-[#ef4423] dark:text-[#ff6b3d] mb-1">
+                Section 03 · Cross-Case Systemic Mapping &amp; Stratigraphy
+              </div>
+              <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold tracking-tight text-[#0f1210] dark:text-[#f3f0e9]">
+                Nexus Connections, Kumu Diagram &amp; Procedural Strata
+              </h2>
+              <p className="text-xs sm:text-sm text-[#4a514b] dark:text-[#a6aba7] mt-1 max-w-3xl">
+                Select any combination of published cases below to map shared institutional actors, systemic #tags, Kumu causal clusters, and a chronological stratigraphic stack of Procedural &amp; Institutional Analysis (earliest case at bottom to most recent at top).
+              </p>
+            </div>
+            <span className="font-mono-tabular text-xs text-[#6a716b] dark:text-[#8d948e]">
+              {selectedSlugs.length} of {sites.length} mapped
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="h-72 bg-[#faf8f4] dark:bg-[#141715] border border-[#ddd8ce] dark:border-[#262b27] animate-pulse" />
+          ) : sites.length === 0 ? (
+            <div className="bg-[#faf8f4] dark:bg-[#141715] border border-[#ddd8ce] dark:border-[#262b27] p-8 text-center text-xs text-[#6a716b] dark:text-[#8d948e]">
+              Publish one or more case dossiers to activate the Cross-Case Nexus, Kumu Systemic Diagram, and Stratigraphic Map.
+            </div>
+          ) : (
+            <NexusMapView
+              graph={publicNexusGraph}
+              accentVariant="ember"
+              defaultViewMode="kumu"
+              subtitle="Switch between Systemic Map (Kumu), Relationship Web, Procedural Stratigraphic Map, X×Y Axis Matrix, and Chronology Axis."
+              selectableCases={selectableCases}
+              selectedCaseIds={selectedSlugs}
+              onToggleCaseId={toggleNexusSlug}
+              onSelectAllCases={() => setSelectedSlugs(sites.map((s) => s.slug))}
+              onClearCases={() => setSelectedSlugs([])}
+              stratigraphicData={publicStratigraphicData}
+              onSelectCaseId={(slug) => onOpenSite(slug)}
+              onOpenStratumCase={(stratum) => {
+                if (stratum.slug) onOpenSite(stratum.slug);
+              }}
+              onInspectNodeArtifact={(node) => {
+                const match = allEvidence.find(
+                  (ev) => ev.id === node.refId || ev.title === (node.fullLabel || node.label)
+                );
+                if (match) {
+                  setPreviewArtifact(match);
+                } else {
+                  setPreviewArtifact({
+                    id: node.id,
+                    title: node.fullLabel || node.label,
+                    mediaType: (node.mediaType as MediaType) || 'file',
+                    fileId: node.fileId,
+                    fileName: node.fileName,
+                    sha256: node.sha256,
+                    textContent: node.textContent,
+                    embedUrl: node.embedUrl,
+                    description: node.description,
+                    tags: [],
+                    siteSlug: sites[0]?.slug || '',
+                    siteTitle: 'Public Archive',
+                  });
+                }
+              }}
+            />
+          )}
+        </section>
+
+        {/* SECTION 4: EVIDENCE */}
         <section id="evidence" className="space-y-6 pt-4 border-t border-[#ddd8ce] dark:border-[#262b27]">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#ddd8ce] dark:border-[#262b27] pb-4">
             <div>
               <div className="font-mono-tabular text-[11px] font-semibold uppercase tracking-[0.14em] text-[#ef4423] dark:text-[#ff6b3d] mb-1">
-                Section 03 · Primary Exhibits &amp; Media
+                Section 04 · Primary Exhibits &amp; Media
               </div>
               <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold tracking-tight text-[#0f1210] dark:text-[#f3f0e9]">
                 Public Evidence &amp; Video Exhibits
@@ -711,12 +832,12 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
           )}
         </section>
 
-        {/* SECTION 4: PROJECTS */}
+        {/* SECTION 5: PROJECTS */}
         <section id="projects" className="space-y-6 pt-4 border-t border-[#ddd8ce] dark:border-[#262b27]">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#ddd8ce] dark:border-[#262b27] pb-4">
             <div>
               <div className="font-mono-tabular text-[11px] font-semibold uppercase tracking-[0.14em] text-[#ef4423] dark:text-[#ff6b3d] mb-1">
-                Section 04 · Research &amp; Public Initiatives
+                Section 05 · Research &amp; Public Initiatives
               </div>
               <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold tracking-tight text-[#0f1210] dark:text-[#f3f0e9]">
                 Published Projects
@@ -773,12 +894,12 @@ export const PublicArchiveDirectory: React.FC<PublicArchiveDirectoryProps> = ({
           )}
         </section>
 
-        {/* SECTION 5: DOCUMENTS */}
+        {/* SECTION 6: DOCUMENTS */}
         <section id="documents" className="space-y-6 pt-4 border-t border-[#ddd8ce] dark:border-[#262b27]">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#ddd8ce] dark:border-[#262b27] pb-4">
             <div>
               <div className="font-mono-tabular text-[11px] font-semibold uppercase tracking-[0.14em] text-[#ef4423] dark:text-[#ff6b3d] mb-1">
-                Section 05 · Authenticated Filings
+                Section 06 · Authenticated Filings
               </div>
               <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold tracking-tight text-[#0f1210] dark:text-[#f3f0e9]">
                 Verified Public Documents

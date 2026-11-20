@@ -968,15 +968,28 @@ export function buildPortfolioNexus(params: {
   cases: CaseRecord[];
   vaultItems: VaultItem[];
   collections: EvidenceCollection[];
+  selectedCaseIds?: string[];
 }): NexusGraphData {
-  const { cases, vaultItems, collections } = params;
+  const { cases, vaultItems, collections, selectedCaseIds } = params;
   const cx = 500;
   const cy = 290;
   const nodes: NexusNode[] = [];
   const edges: NexusEdge[] = [];
 
-  const cappedCases = cases.slice(0, 12);
-  const cappedCols = collections.slice(0, 8);
+  const filteredCases =
+    selectedCaseIds !== undefined
+      ? cases.filter((c) => selectedCaseIds.includes(c.id))
+      : cases;
+
+  const cappedCases = filteredCases.slice(0, 14);
+  const activeCaseSet = new Set(cappedCases.map((c) => c.id));
+  const cappedCols = collections
+    .filter((col) => !col.caseId || activeCaseSet.has(col.caseId))
+    .slice(0, 8);
+  const relevantVaultItems =
+    selectedCaseIds !== undefined
+      ? vaultItems.filter((v) => v.caseIds.some((cid) => activeCaseSet.has(cid)))
+      : vaultItems;
 
   // 1. Place Cases cleanly at the heart of the portfolio nexus
   const caseCoords =
@@ -1084,7 +1097,7 @@ export function buildPortfolioNexus(params: {
       if (bucket && !bucket.collectionIds.includes(col.id)) bucket.collectionIds.push(col.id);
     });
   });
-  vaultItems.forEach((v) => {
+  relevantVaultItems.forEach((v) => {
     (v.tags || []).forEach((t) => {
       const bucket = ensureTag(t);
       if (bucket) {
@@ -1177,9 +1190,9 @@ export function buildPortfolioNexus(params: {
       .filter(([, info]) => info.caseIds.length + info.collectionIds.length >= 2)
       .map(([k]) => k)
   );
-  const bridgeItems = vaultItems
+  const bridgeItems = relevantVaultItems
     .filter((v) => {
-      const multiCase = v.caseIds.length >= 2;
+      const multiCase = v.caseIds.filter((cid) => activeCaseSet.has(cid)).length >= 2;
       const hasSharedTag = v.tags.some((t) => sharedTagKeys.has(normalizeToken(t)));
       return multiCase || hasSharedTag;
     })
@@ -1501,3 +1514,883 @@ export function computeNexusAxisMatrix(
 
   return { rows, cols, cells, maxScore, isSameAxis };
 }
+
+/**
+ * Builds a cross-case Public Archive Nexus graph directly from selected PublicSite dossiers.
+ * Links cases via shared #tags, shared court/judge/disposition metadata, shared actors,
+ * curated collections, and tagged evidence/documents.
+ */
+export function buildPublicPortfolioNexus(params: {
+  sites: PublicSite[];
+  selectedSlugs?: string[];
+}): NexusGraphData {
+  const { sites, selectedSlugs } = params;
+  const cx = 500;
+  const cy = 290;
+  const nodes: NexusNode[] = [];
+  const edges: NexusEdge[] = [];
+
+  const filteredSites =
+    selectedSlugs !== undefined
+      ? sites.filter((s) => selectedSlugs.includes(s.slug))
+      : sites;
+
+  const cappedSites = filteredSites.slice(0, 14);
+  if (cappedSites.length === 0) {
+    return {
+      scope: 'portfolio',
+      title: 'Public Cross-Case Nexus Map',
+      nodes: [],
+      edges: [],
+      insights: [],
+      chronology: [],
+    };
+  }
+
+  // 1. Place selected Public Case / Project nodes
+  const caseCoords =
+    cappedSites.length === 1
+      ? [{ x: cx, y: cy }]
+      : placeArc(cappedSites.length, cx, cy, 185, 120, -90, 230);
+
+  cappedSites.forEach((s, idx) => {
+    nodes.push({
+      id: `case:${s.slug}`,
+      label: truncateLabel(s.headline || s.title, 24),
+      fullLabel: s.headline || s.title,
+      subtitle: `${s.caseType === 'project' ? 'Project' : 'Case'} ${s.caseNumber || s.slug} · ${s.status}`,
+      kind: 'case',
+      date: s.arrestDates || s.closureDate || s.timeline?.[0]?.date || s.caseNumber,
+      x: caseCoords[idx].x,
+      y: caseCoords[idx].y,
+      degree: 0,
+      isPublic: true,
+      refId: s.slug,
+      description: stripTagsQuick(s.intro || ''),
+    });
+  });
+
+  // 2. Shared & Case Metadata Hubs (Court, Judge/Lead, Subject, Disposition, Custom Fields)
+  const metaIndex = new Map<string, { meta: ExtractedMeta; slugs: string[] }>();
+  cappedSites.forEach((s) => {
+    const metas = extractCaseMetadata({
+      court: s.court,
+      judge: s.judge,
+      charge: s.charge,
+      status: s.status,
+      disposition: s.disposition,
+      customFields: s.customFields,
+    });
+    metas.forEach((m) => {
+      if (!metaIndex.has(m.key)) metaIndex.set(m.key, { meta: m, slugs: [] });
+      const bucket = metaIndex.get(m.key)!;
+      if (!bucket.slugs.includes(s.slug)) bucket.slugs.push(s.slug);
+    });
+  });
+
+  const sortedMetas = Array.from(metaIndex.values())
+    .sort((a, b) => b.slugs.length - a.slugs.length)
+    .slice(0, 10);
+
+  const metaCoords = placeArc(sortedMetas.length, cx, cy, 405, 220, -58, 58);
+  sortedMetas.forEach((entry, idx) => {
+    const metaNodeId = `meta:${entry.meta.key}`;
+    nodes.push({
+      id: metaNodeId,
+      label: truncateLabel(entry.meta.value, 24),
+      fullLabel: entry.meta.value,
+      subtitle: `${entry.meta.category} · ${entry.slugs.length} case(s)`,
+      kind: 'metadata',
+      metaCategory: entry.meta.category,
+      x: metaCoords[idx].x,
+      y: metaCoords[idx].y,
+      degree: 0,
+      description: `${entry.meta.category}: ${entry.meta.value} (links ${entry.slugs.length} case${
+        entry.slugs.length === 1 ? '' : 's'
+      })`,
+    });
+    entry.slugs.forEach((slug) => {
+      edges.push({
+        id: `e:meta:${entry.meta.key}:case:${slug}`,
+        source: metaNodeId,
+        target: `case:${slug}`,
+        relation: entry.meta.category,
+        strength: entry.slugs.length >= 2 ? 2 : 1,
+      });
+    });
+  });
+
+  // 3. Tags across Selected Cases, Evidence, and Collections
+  const tagMap = new Map<
+    string,
+    { slugs: string[]; collectionIds: string[]; evidenceKeys: string[] }
+  >();
+  const ensureTag = (raw: string) => {
+    const k = normalizeToken(raw);
+    if (!k) return null;
+    if (!tagMap.has(k)) {
+      tagMap.set(k, { slugs: [], collectionIds: [], evidenceKeys: [] });
+    }
+    return tagMap.get(k)!;
+  };
+
+  cappedSites.forEach((s) => {
+    (s.tags || []).forEach((t) => {
+      const b = ensureTag(t);
+      if (b && !b.slugs.includes(s.slug)) b.slugs.push(s.slug);
+    });
+    (s.collections || []).forEach((c) => {
+      (c.tags || []).forEach((t) => {
+        const b = ensureTag(t);
+        if (b) {
+          if (!b.collectionIds.includes(c.id)) b.collectionIds.push(c.id);
+          if (!b.slugs.includes(s.slug)) b.slugs.push(s.slug);
+        }
+      });
+    });
+    (s.evidence || []).forEach((ev) => {
+      (ev.tags || []).forEach((t) => {
+        const b = ensureTag(t);
+        if (b) {
+          const k = `${s.slug}:${ev.id}`;
+          if (!b.evidenceKeys.includes(k)) b.evidenceKeys.push(k);
+          if (!b.slugs.includes(s.slug)) b.slugs.push(s.slug);
+        }
+      });
+    });
+  });
+
+  const sortedTags = Array.from(tagMap.entries())
+    .sort((a, b) => {
+      const scoreA = a[1].slugs.length * 3 + a[1].collectionIds.length * 2 + a[1].evidenceKeys.length;
+      const scoreB = b[1].slugs.length * 3 + b[1].collectionIds.length * 2 + b[1].evidenceKeys.length;
+      return scoreB - scoreA;
+    })
+    .slice(0, 26);
+
+  const tagCoords = placeStaggeredArc(sortedTags.length, cx, cy, 345, 185, 420, 230, 192, 348);
+  sortedTags.forEach(([tag, info], idx) => {
+    const tagId = `tag:${tag}`;
+    nodes.push({
+      id: tagId,
+      label: truncateLabel(`#${tag}`, 22),
+      fullLabel: `#${tag}`,
+      subtitle: `${info.slugs.length} case(s) · ${info.collectionIds.length} col(s) · ${info.evidenceKeys.length} exhibit(s)`,
+      kind: 'tag',
+      x: tagCoords[idx].x,
+      y: tagCoords[idx].y,
+      degree: 0,
+      description: `#${tag} — Systemic theme linking ${info.slugs.length} dossier(s), ${info.collectionIds.length} collection(s), and ${info.evidenceKeys.length} exhibit(s).`,
+    });
+    info.slugs.forEach((slug) => {
+      edges.push({
+        id: `e:${tagId}:case:${slug}`,
+        source: tagId,
+        target: `case:${slug}`,
+        relation: `shared tag #${tag}`,
+        strength: info.slugs.length >= 2 ? 2 : 1,
+      });
+    });
+  });
+
+  // 4. Shared & Key Institutional Actors across selected public dossiers
+  const actorIndex = new Map<
+    string,
+    { name: string; role: string; org?: string; notes?: string; slugs: string[] }
+  >();
+  cappedSites.forEach((s) => {
+    (s.actors || []).forEach((act) => {
+      const k = normalizeToken(act.name);
+      if (!k) return;
+      if (!actorIndex.has(k)) {
+        actorIndex.set(k, {
+          name: act.name,
+          role: act.role,
+          org: act.organization,
+          notes: act.notes,
+          slugs: [],
+        });
+      }
+      const bucket = actorIndex.get(k)!;
+      if (!bucket.slugs.includes(s.slug)) bucket.slugs.push(s.slug);
+    });
+  });
+
+  const sortedActors = Array.from(actorIndex.entries())
+    .sort((a, b) => b[1].slugs.length - a[1].slugs.length)
+    .slice(0, 8);
+
+  const actorCoords = placeArc(sortedActors.length, cx, cy, 380, 200, 128, 178);
+  sortedActors.forEach(([key, act], idx) => {
+    const id = `actor:${key}`;
+    nodes.push({
+      id,
+      label: truncateLabel(act.name, 22),
+      fullLabel: act.name,
+      subtitle: `${act.role}${act.org ? ` · ${act.org}` : ''} (${act.slugs.length} case${
+        act.slugs.length === 1 ? '' : 's'
+      })`,
+      kind: 'actor',
+      x: actorCoords[idx].x,
+      y: actorCoords[idx].y,
+      degree: 0,
+      description: act.notes || `${act.name} — ${act.role}`,
+    });
+    act.slugs.forEach((slug) => {
+      edges.push({
+        id: `e:${id}:case:${slug}`,
+        source: id,
+        target: `case:${slug}`,
+        relation: act.role || 'Actor / Institution',
+        strength: act.slugs.length >= 2 ? 2 : 1,
+      });
+    });
+  });
+
+  // 5. Tagged / Bridged Evidence Exhibits across selected public sites
+  const sharedTagSet = new Set(
+    sortedTags.filter(([, info]) => info.slugs.length >= 2).map(([k]) => k)
+  );
+  const bridgedEv: Array<{
+    siteSlug: string;
+    ev: NonNullable<PublicSite['evidence']>[number];
+  }> = [];
+  cappedSites.forEach((s) => {
+    (s.evidence || []).forEach((ev) => {
+      const hasTag = (ev.tags || []).some((t) => sortedTags.some(([tk]) => tk === normalizeToken(t)));
+      if (hasTag && bridgedEv.length < 10) {
+        bridgedEv.push({ siteSlug: s.slug, ev });
+      }
+    });
+  });
+
+  const evCoords = placeArc(bridgedEv.length, cx, cy, 390, 210, 68, 120);
+  bridgedEv.forEach(({ siteSlug, ev }, idx) => {
+    const id = `ev:${siteSlug}:${ev.id}`;
+    nodes.push({
+      id,
+      label: truncateLabel(ev.title, 22),
+      fullLabel: ev.title,
+      subtitle: `${ev.mediaType.toUpperCase()} Exhibit`,
+      kind: 'evidence',
+      x: evCoords[idx].x,
+      y: evCoords[idx].y,
+      degree: 0,
+      isPublic: true,
+      refId: ev.id,
+      mediaType: ev.mediaType,
+      fileId: ev.fileId,
+      fileName: ev.fileName,
+      sha256: ev.sha256,
+      textContent: ev.textContent,
+      embedUrl: ev.embedUrl,
+      description: ev.description,
+    });
+    (ev.tags || []).forEach((t: string) => {
+      const k = normalizeToken(t);
+      if (sortedTags.some(([tk]) => tk === k)) {
+        edges.push({
+          id: `e:tag:${k}:${id}`,
+          source: `tag:${k}`,
+          target: id,
+          relation: `tagged #${k}`,
+          strength: sharedTagSet.has(k) ? 2 : 1,
+        });
+      }
+    });
+    edges.push({
+      id: `e:${id}:case:${siteSlug}`,
+      source: id,
+      target: `case:${siteSlug}`,
+      relation: 'published exhibit',
+      strength: 1,
+    });
+  });
+
+  const finalized = finalizeDegrees(nodes, edges);
+
+  const adj = new Map<string, Set<string>>();
+  finalized.edges.forEach((e) => {
+    if (!adj.has(e.source)) adj.set(e.source, new Set());
+    if (!adj.has(e.target)) adj.set(e.target, new Set());
+    adj.get(e.source)!.add(e.target);
+    adj.get(e.target)!.add(e.source);
+  });
+  const nodeMap = new Map(finalized.nodes.map((n) => [n.id, n]));
+
+  const chronology: NexusChronoPoint[] = cappedSites.map((s) => {
+    const cNodeId = `case:${s.slug}`;
+    const direct = Array.from(adj.get(cNodeId) || []);
+    return {
+      id: s.slug,
+      nodeId: cNodeId,
+      dateLabel: s.arrestDates || s.closureDate || s.timeline?.[0]?.date || s.caseNumber || s.slug,
+      title: truncateLabel(s.headline || s.title, 26),
+      subtitle: `${s.status}${s.court ? ` · ${s.court}` : ''}`,
+      tagNodeIds: direct.filter((id) => nodeMap.get(id)?.kind === 'tag'),
+      metadataNodeIds: direct.filter((id) => nodeMap.get(id)?.kind === 'metadata'),
+      actorNodeIds: direct.filter((id) => nodeMap.get(id)?.kind === 'actor'),
+      collectionNodeIds: direct.filter((id) => nodeMap.get(id)?.kind === 'collection'),
+      artifactNodeIds: direct.filter((id) => {
+        const k = nodeMap.get(id)?.kind;
+        return k === 'evidence' || k === 'document';
+      }),
+    };
+  });
+
+  const insights: NexusInsight[] = [];
+  const multiCaseTag = sortedTags.find(([, info]) => info.slugs.length >= 2);
+  if (multiCaseTag) {
+    const [topTag, info] = multiCaseTag;
+    insights.push({
+      id: 'pub:tag',
+      category: 'pattern',
+      title: `Cross-Case Theme: #${topTag}`,
+      detail: `Connects ${info.slugs.length} published dossiers, ${info.collectionIds.length} collections, and ${info.evidenceKeys.length} exhibits.`,
+      focusNodeId: `tag:${topTag}`,
+    });
+  } else if (sortedTags.length > 0) {
+    const [topTag, info] = sortedTags[0];
+    insights.push({
+      id: 'pub:tag',
+      category: 'pattern',
+      title: `Active Tag Axis: #${topTag}`,
+      detail: `Links ${info.slugs.length} dossier(s) and ${info.evidenceKeys.length} exhibit(s).`,
+      focusNodeId: `tag:${topTag}`,
+    });
+  }
+
+  const sharedMeta = sortedMetas.find((m) => m.slugs.length >= 2);
+  if (sharedMeta) {
+    insights.push({
+      id: 'pub:meta',
+      category: 'bridge',
+      title: `Shared ${sharedMeta.meta.category}`,
+      detail: `"${sharedMeta.meta.value}" bridges ${sharedMeta.slugs.length} selected cases.`,
+      focusNodeId: `meta:${sharedMeta.meta.key}`,
+    });
+  }
+
+  const sharedActor = sortedActors.find(([, a]) => a.slugs.length >= 2);
+  if (sharedActor) {
+    insights.push({
+      id: 'pub:actor',
+      category: 'bridge',
+      title: `Cross-Case Actor: ${sharedActor[1].name}`,
+      detail: `Appears across ${sharedActor[1].slugs.length} published cases (${sharedActor[1].role}).`,
+      focusNodeId: `actor:${sharedActor[0]}`,
+    });
+  }
+
+  insights.push({
+    id: 'pub:scope',
+    category: 'coverage',
+    title: `Mapping ${cappedSites.length} Case${cappedSites.length === 1 ? '' : 's'}`,
+    detail: `${sortedTags.length} systemic tags and ${sortedMetas.length} metadata hubs cross-referenced across selected dossiers.`,
+  });
+
+  return {
+    scope: 'portfolio',
+    title: 'Cross-Case Systemic & Relationship Nexus',
+    nodes: finalized.nodes,
+    edges: finalized.edges,
+    insights: insights.slice(0, 4),
+    chronology,
+  };
+}
+
+// ============================================================================
+// STRATIGRAPHIC MAP ENGINE (Procedural & Institutional Analysis Layering)
+// ============================================================================
+
+export interface StratigraphicItem {
+  id: string;
+  index: number;
+  heading?: string;
+  text: string;
+  sourceTitle: string;
+  matchedTags: string[];
+  isFallback?: boolean;
+}
+
+export interface StratigraphicStratum {
+  id: string;
+  caseId: string;
+  slug?: string;
+  caseNumber: string;
+  title: string;
+  status: string;
+  court?: string;
+  dateLabel: string;
+  sortTimestamp: number;
+  sourceMode: 'procedural-analysis' | 'narrative-fallback' | 'empty';
+  items: StratigraphicItem[];
+  tags: string[];
+}
+
+export interface StratigraphicMapData {
+  /** Ordered strictly chronological ascending: index 0 = earliest (bottom), last = most recent (top) */
+  strataEarliestToLatest: StratigraphicStratum[];
+  recurringThemes: Array<{
+    tag: string;
+    caseCount: number;
+    itemCount: number;
+    stratumIds: string[];
+  }>;
+}
+
+function parseFlexibleCaseTimestamp(candidates: Array<string | undefined | null>, createdAtMs?: number): {
+  timestamp: number;
+  label: string;
+} {
+  for (const raw of candidates) {
+    const str = (raw || '').trim();
+    if (!str) continue;
+
+    // 1. YYYY-MM-DD
+    const iso = str.match(/(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?/);
+    if (iso) {
+      const y = Number(iso[1]);
+      const m = Number(iso[2]) - 1;
+      const d = Number(iso[3] || 1);
+      const t = Date.UTC(y, Math.max(0, Math.min(11, m)), Math.max(1, Math.min(31, d)));
+      if (!Number.isNaN(t)) return { timestamp: t, label: str };
+    }
+
+    // 2. MM/DD/YYYY
+    const us = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (us) {
+      const m = Number(us[1]) - 1;
+      const d = Number(us[2]);
+      const y = Number(us[3]);
+      const t = Date.UTC(y, Math.max(0, Math.min(11, m)), Math.max(1, Math.min(31, d)));
+      if (!Number.isNaN(t)) return { timestamp: t, label: str };
+    }
+
+    // 3. Direct Date.parse or standalone 4-digit year
+    const parsed = Date.parse(str);
+    if (!Number.isNaN(parsed)) {
+      return { timestamp: parsed, label: str };
+    }
+
+    const yearOnly = str.match(/\b(19\d{2}|20\d{2})\b/);
+    if (yearOnly) {
+      return { timestamp: Date.UTC(Number(yearOnly[1]), 0, 1), label: str };
+    }
+  }
+
+  if (createdAtMs && createdAtMs > 0) {
+    return {
+      timestamp: createdAtMs,
+      label: new Date(createdAtMs).toISOString().slice(0, 10),
+    };
+  }
+  return { timestamp: Number.MAX_SAFE_INTEGER, label: 'Undated' };
+}
+
+function isTemplatePlaceholder(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  return (
+    !lower ||
+    lower.startsWith('enter structured findings and documented citations for')
+  );
+}
+
+function extractItemsFromSectionContent(
+  content: string,
+  sourceTitle: string,
+  caseTags: string[],
+  isFallback: boolean
+): StratigraphicItem[] {
+  const raw = (content || '').trim();
+  if (!raw) return [];
+
+  const blocks: Array<{ heading?: string; text: string }> = [];
+
+  if (typeof DOMParser !== 'undefined' && /<[a-z][\s\S]*>/i.test(raw)) {
+    try {
+      const doc = new DOMParser().parseFromString(raw, 'text/html');
+      const children = Array.from(doc.body.childNodes);
+      let pendingHeading: string | undefined;
+
+      const pushBlock = (text: string, heading?: string) => {
+        const clean = text.replace(/\s+/g, ' ').trim();
+        if (!clean || isTemplatePlaceholder(clean)) return;
+        blocks.push({ heading, text: clean });
+      };
+
+      for (const child of children) {
+        if (child.nodeType === 3) {
+          const txt = (child.textContent || '').trim();
+          if (txt) {
+            pushBlock(txt, pendingHeading);
+            pendingHeading = undefined;
+          }
+          continue;
+        }
+        if (child.nodeType !== 1) continue;
+        const el = child as HTMLElement;
+        const tag = el.tagName.toLowerCase();
+
+        if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4') {
+          pendingHeading = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        } else if (tag === 'ul' || tag === 'ol') {
+          const lis = Array.from(el.querySelectorAll('li'));
+          lis.forEach((li) => {
+            pushBlock(li.textContent || '', pendingHeading);
+          });
+          pendingHeading = undefined;
+        } else {
+          // Check if the paragraph itself has <br> line breaks separating bulleted/numbered points
+          const htmlInner = el.innerHTML || '';
+          if (/<br\s*\/?>/i.test(htmlInner)) {
+            const parts = htmlInner
+              .split(/<br\s*\/?>/i)
+              .map((p) => stripTagsQuick(p))
+              .filter(Boolean);
+            parts.forEach((p) => pushBlock(p.replace(/^[-•*]\s+|\d+[.)]\s+/, ''), pendingHeading));
+          } else {
+            pushBlock(el.textContent || '', pendingHeading);
+          }
+          pendingHeading = undefined;
+        }
+      }
+
+      if (pendingHeading && !isTemplatePlaceholder(pendingHeading)) {
+        blocks.push({ text: pendingHeading });
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  if (blocks.length === 0) {
+    const plain = stripTagsQuick(
+      raw
+        .replace(/<\/(p|li|h1|h2|h3|h4|blockquote|div|tr)>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+    );
+    // Split on newlines first; preserve original line breaks if plain collapsed spaces
+    const rawLines = raw
+      .replace(/<\/(p|li|h1|h2|h3|h4|blockquote|div)>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .split(/\r?\n+/)
+      .map((l) => l.replace(/^[-•*]\s+|\d+[.)]\s+/, '').trim())
+      .filter((l) => l.length > 0 && !isTemplatePlaceholder(l));
+
+    if (rawLines.length > 0) {
+      rawLines.forEach((l) => blocks.push({ text: l }));
+    } else if (plain && !isTemplatePlaceholder(plain)) {
+      blocks.push({ text: plain });
+    }
+  }
+
+  return blocks.map((b, idx) => {
+    const combined = `${b.heading || ''} ${b.text}`;
+    const matchedTags = caseTags.filter((t) => textMentionsToken(combined, t));
+    return {
+      id: `item:${idx}`,
+      index: idx + 1,
+      heading: b.heading,
+      text: b.text,
+      sourceTitle,
+      matchedTags,
+      isFallback,
+    };
+  });
+}
+
+export interface StratigraphicCaseInput {
+  id: string;
+  slug?: string;
+  caseNumber?: string;
+  title: string;
+  status: string;
+  court?: string;
+  arrestDates?: string;
+  closureDate?: string;
+  createdAtMs?: number;
+  tags?: string[];
+  earliestTimelineDate?: string;
+  sections: Array<{ id: string; order: number; title: string; content: string }>;
+}
+
+export function buildStratigraphicMap(
+  caseInputs: StratigraphicCaseInput[]
+): StratigraphicMapData {
+  const strata: StratigraphicStratum[] = caseInputs.map((c) => {
+    const { timestamp, label } = parseFlexibleCaseTimestamp(
+      [c.earliestTimelineDate, c.arrestDates, c.closureDate],
+      c.createdAtMs
+    );
+    const caseTags = (c.tags || []).map((t) => t.replace(/^#+/, '').trim()).filter(Boolean);
+
+    // 1. Primary: Look for "Procedural & Institutional Analysis" section(s)
+    const procSections = c.sections.filter((s) => {
+      const t = (s.title || '').toLowerCase();
+      return (
+        (t.includes('procedural') && t.includes('institutional')) ||
+        t.includes('procedural & institutional') ||
+        t.includes('institutional analysis')
+      );
+    });
+
+    let items: StratigraphicItem[] = [];
+    let sourceMode: StratigraphicStratum['sourceMode'] = 'empty';
+
+    procSections.forEach((sec) => {
+      items.push(...extractItemsFromSectionContent(sec.content, sec.title, caseTags, false));
+    });
+
+    if (items.length > 0) {
+      sourceMode = 'procedural-analysis';
+    } else {
+      // Fallback: check Statutory/Policy/Executive sections if Procedural section wasn't populated or wasn't published
+      const altSections = c.sections.filter((s) => {
+        const t = (s.title || '').toLowerCase();
+        return (
+          t.includes('procedural') ||
+          t.includes('institutional') ||
+          t.includes('statutory') ||
+          t.includes('policy') ||
+          t.includes('executive summary')
+        );
+      });
+      altSections.forEach((sec) => {
+        items.push(...extractItemsFromSectionContent(sec.content, sec.title, caseTags, true));
+      });
+      if (items.length > 0) {
+        sourceMode = 'narrative-fallback';
+      }
+    }
+
+    // Re-number sequentially cleanly
+    items = items.map((it, idx) => ({ ...it, id: `${c.id}:stratum:${idx}`, index: idx + 1 }));
+
+    return {
+      id: c.id,
+      caseId: c.id,
+      slug: c.slug,
+      caseNumber: c.caseNumber || c.slug || c.id,
+      title: c.title,
+      status: c.status,
+      court: c.court,
+      dateLabel: label,
+      sortTimestamp: timestamp,
+      sourceMode,
+      items,
+      tags: caseTags,
+    };
+  });
+
+  // Sort strictly earliest (bottom) to most recent (top)
+  strata.sort((a, b) => {
+    if (a.sortTimestamp !== b.sortTimestamp) return a.sortTimestamp - b.sortTimestamp;
+    return String(a.caseNumber).localeCompare(String(b.caseNumber));
+  });
+
+  // Compute recurring systemic themes across strata (tags appearing in case tags or item text)
+  const themeMap = new Map<string, { stratumIds: Set<string>; itemCount: number }>();
+  strata.forEach((st) => {
+    st.tags.forEach((tag) => {
+      const k = normalizeToken(tag);
+      if (!k) return;
+      if (!themeMap.has(k)) themeMap.set(k, { stratumIds: new Set(), itemCount: 0 });
+      themeMap.get(k)!.stratumIds.add(st.id);
+    });
+    st.items.forEach((it) => {
+      it.matchedTags.forEach((tag) => {
+        const k = normalizeToken(tag);
+        if (!k) return;
+        if (!themeMap.has(k)) themeMap.set(k, { stratumIds: new Set(), itemCount: 0 });
+        themeMap.get(k)!.stratumIds.add(st.id);
+        themeMap.get(k)!.itemCount += 1;
+      });
+    });
+  });
+
+  const recurringThemes = Array.from(themeMap.entries())
+    .map(([tag, info]) => ({
+      tag,
+      caseCount: info.stratumIds.size,
+      itemCount: info.itemCount,
+      stratumIds: Array.from(info.stratumIds),
+    }))
+    .sort((a, b) => b.caseCount - a.caseCount || b.itemCount - a.itemCount)
+    .slice(0, 14);
+
+  return {
+    strataEarliestToLatest: strata,
+    recurringThemes,
+  };
+}
+
+// ============================================================================
+// KUMU SYSTEMIC FORCE-DIRECTED LAYOUT ENGINE
+// ============================================================================
+
+export interface KumuNodePosition {
+  x: number;
+  y: number;
+  radius: number;
+}
+
+export interface KumuFeedbackLoop {
+  id: string;
+  label: string;
+  nodes: string[];
+  description: string;
+}
+
+export function computeKumuLayout(graph: NexusGraphData): {
+  positions: Record<string, KumuNodePosition>;
+  loops: KumuFeedbackLoop[];
+} {
+  const W = 1000;
+  const H = 600;
+  const nodes = graph.nodes;
+  const edges = graph.edges;
+
+  const positions: Record<string, KumuNodePosition> = {};
+  if (nodes.length === 0) return { positions, loops: [] };
+
+  // Seed deterministic positions seeded nicely by kind clusters so layout stabilizes reliably
+  const kindAngle: Record<NexusNodeKind, number> = {
+    case: 0,
+    tag: -Math.PI / 2,
+    metadata: Math.PI / 4,
+    actor: (3 * Math.PI) / 4,
+    collection: (-3 * Math.PI) / 4,
+    timeline: Math.PI / 8,
+    evidence: (-5 * Math.PI) / 8,
+    document: (5 * Math.PI) / 8,
+  };
+
+  const simNodes = nodes.map((n, idx) => {
+    const baseAngle = kindAngle[n.kind] + ((idx % 7) - 3) * 0.34;
+    const spread = n.kind === 'case' ? 95 : 190 + (idx % 3) * 35;
+    const radius =
+      n.kind === 'case'
+        ? Math.min(26, 16 + n.degree * 1.4)
+        : n.kind === 'tag' || n.kind === 'metadata'
+        ? Math.min(22, 11 + n.degree * 1.5)
+        : Math.min(18, 9 + n.degree * 1.2);
+    return {
+      id: n.id,
+      kind: n.kind,
+      x: W / 2 + Math.cos(baseAngle) * spread,
+      y: H / 2 + Math.sin(baseAngle) * spread * 0.72,
+      vx: 0,
+      vy: 0,
+      radius,
+    };
+  });
+
+  const idxById = new Map(simNodes.map((n, i) => [n.id, i]));
+  const iterations = 160;
+  const kRepulse = 4400;
+  const kAttract = 0.036;
+  const idealLen = 135;
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    const temp = Math.max(0.15, 1 - iter / iterations);
+
+    // Pairwise repulsion
+    for (let i = 0; i < simNodes.length; i += 1) {
+      for (let j = i + 1; j < simNodes.length; j += 1) {
+        const a = simNodes[i];
+        const b = simNodes[j];
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let distSq = dx * dx + dy * dy;
+        if (distSq < 16) {
+          dx = (i % 2 === 0 ? 1 : -1) * 4;
+          dy = (j % 2 === 0 ? 1 : -1) * 4;
+          distSq = 32;
+        }
+        const dist = Math.sqrt(distSq);
+        const minGap = a.radius + b.radius + 46;
+        const rep = (kRepulse / distSq) * (dist < minGap ? 2.2 : 1);
+        const fx = (dx / dist) * rep;
+        const fy = (dy / dist) * rep;
+        a.vx += fx;
+        a.vy += fy;
+        b.vx -= fx;
+        b.vy -= fy;
+      }
+    }
+
+    // Spring attraction along edges
+    for (const e of edges) {
+      const ia = idxById.get(e.source);
+      const ib = idxById.get(e.target);
+      if (ia === undefined || ib === undefined) continue;
+      const a = simNodes[ia];
+      const b = simNodes[ib];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const targetDist = e.strength === 2 ? idealLen * 0.85 : idealLen * 1.05;
+      const force = (dist - targetDist) * kAttract;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      a.vx += fx;
+      a.vy += fy;
+      b.vx -= fx;
+      b.vy -= fy;
+    }
+
+    // Gentle centering gravity & step
+    for (const n of simNodes) {
+      n.vx += (W / 2 - n.x) * 0.016;
+      n.vy += (H / 2 - n.y) * 0.019;
+      n.x += Math.max(-18, Math.min(18, n.vx * 0.45 * temp));
+      n.y += Math.max(-18, Math.min(18, n.vy * 0.45 * temp));
+      n.vx *= 0.6;
+      n.vy *= 0.6;
+
+      // Clamp comfortably inside SVG canvas with margin for labels
+      n.x = Math.max(78, Math.min(W - 78, n.x));
+      n.y = Math.max(54, Math.min(H - 64, n.y));
+    }
+  }
+
+  for (const n of simNodes) {
+    positions[n.id] = { x: n.x, y: n.y, radius: n.radius };
+  }
+
+  // Detect systemic hub bridges across multiple cases (Kumu leverage & systemic loop summary)
+  const adj = new Map<string, Set<string>>();
+  edges.forEach((e) => {
+    if (!adj.has(e.source)) adj.set(e.source, new Set());
+    if (!adj.has(e.target)) adj.set(e.target, new Set());
+    adj.get(e.source)!.add(e.target);
+    adj.get(e.target)!.add(e.source);
+  });
+
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const bridgeHubs = nodes
+    .filter((n) => n.kind === 'tag' || n.kind === 'metadata' || n.kind === 'actor')
+    .map((hub) => {
+      const connectedCases = Array.from(adj.get(hub.id) || [])
+        .map((id) => nodeMap.get(id))
+        .filter((x): x is NexusNode => Boolean(x && x.kind === 'case'));
+      return { hub, connectedCases };
+    })
+    .filter((b) => b.connectedCases.length >= 2)
+    .sort((a, b) => b.connectedCases.length - a.connectedCases.length || b.hub.degree - a.hub.degree)
+    .slice(0, 5);
+
+  const loops: KumuFeedbackLoop[] = bridgeHubs.map((b) => ({
+    id: `loop:${b.hub.id}`,
+    label: `${b.hub.fullLabel || b.hub.label}`,
+    nodes: [b.hub.id, ...b.connectedCases.map((c) => c.id)],
+    description: `Systemic bridge linking ${b.connectedCases
+      .map((c) => c.label)
+      .join(' ↔ ')} (${b.hub.degree} total connections)`,
+  }));
+
+  return { positions, loops };
+}
+

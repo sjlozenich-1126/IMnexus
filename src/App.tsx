@@ -84,16 +84,25 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const navigateTo = (next: AppRoute) => {
-    const path =
+  const navigateTo = (next: AppRoute, hash?: string) => {
+    const basePath =
       next.kind === 'site'
         ? `/site/${encodeURIComponent(next.slug)}`
         : next.kind === 'archive'
         ? '/archive'
         : '/';
-    window.history.pushState({}, '', path);
+    const fullPath = hash ? `${basePath}${hash}` : basePath;
+    window.history.pushState({}, '', fullPath);
     setRoute(next);
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (hash) {
+      const targetId = hash.replace(/^#/, '');
+      window.setTimeout(() => {
+        const el = document.getElementById(targetId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
   };
 
   const toggleDarkMode = () => setDarkMode((prev) => !prev);
@@ -105,7 +114,7 @@ export default function App() {
           slug={route.slug}
           darkMode={darkMode}
           onToggleDarkMode={toggleDarkMode}
-          onNavigateArchive={() => navigateTo({ kind: 'archive' })}
+          onNavigateArchive={(hash) => navigateTo({ kind: 'archive' }, hash)}
           onNavigateConsole={() => navigateTo({ kind: 'console' })}
           isAuthenticated={Boolean(firebaseUser)}
         />

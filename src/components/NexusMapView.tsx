@@ -2,11 +2,14 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   Calendar,
+  CheckSquare,
   GitFork,
   Grid3X3,
   Layers,
   Network,
+  Share2,
   ShieldCheck,
+  Square,
   Tag,
   Users,
 } from 'lucide-react';
@@ -17,18 +20,44 @@ import {
   type NexusMatrixCell,
   type NexusNode,
   type NexusNodeKind,
+  type StratigraphicMapData,
+  type StratigraphicStratum,
 } from '../utils/nexusEngine';
+import { KumuSystemicMap } from './KumuSystemicMap';
+import { StratigraphicMap } from './StratigraphicMap';
+
+export interface SelectableNexusCase {
+  id: string;
+  caseNumber?: string;
+  title: string;
+  status: string;
+  caseType?: string;
+}
+
+export type NexusViewMode =
+  | 'kumu'
+  | 'constellation'
+  | 'stratigraphic'
+  | 'matrix'
+  | 'chronology';
 
 interface NexusMapViewProps {
   graph: NexusGraphData;
   subtitle?: string;
   onSelectCaseId?: (caseId: string) => void;
+  openCaseButtonLabel?: string;
   onInspectNodeArtifact?: (node: NexusNode) => void;
   compact?: boolean;
   accentVariant?: 'forest' | 'ember';
+  defaultViewMode?: NexusViewMode;
+  selectableCases?: SelectableNexusCase[];
+  selectedCaseIds?: string[];
+  onToggleCaseId?: (id: string) => void;
+  onSelectAllCases?: () => void;
+  onClearCases?: () => void;
+  stratigraphicData?: StratigraphicMapData;
+  onOpenStratumCase?: (stratum: StratigraphicStratum) => void;
 }
-
-type NexusViewMode = 'constellation' | 'matrix' | 'chronology';
 
 const KIND_LABELS: Record<NexusNodeKind, string> = {
   case: 'Cases',
@@ -69,12 +98,21 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
   graph,
   subtitle,
   onSelectCaseId,
+  openCaseButtonLabel = 'Open Case Dossier',
   onInspectNodeArtifact,
   compact = false,
   accentVariant = 'forest',
+  defaultViewMode = 'constellation',
+  selectableCases,
+  selectedCaseIds,
+  onToggleCaseId,
+  onSelectAllCases,
+  onClearCases,
+  stratigraphicData,
+  onOpenStratumCase,
 }) => {
   const isEmber = accentVariant === 'ember';
-  const [viewMode, setViewMode] = useState<NexusViewMode>('constellation');
+  const [viewMode, setViewMode] = useState<NexusViewMode>(defaultViewMode);
   const [kindFilter, setKindFilter] = useState<'core' | 'all' | NexusNodeKind>('core');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     () =>
@@ -197,16 +235,8 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
       .filter((x): x is { edge: (typeof graph.edges)[number]; node: NexusNode } => Boolean(x));
   }, [selectedNode, graph.edges, nodeMap]);
 
-  if (graph.nodes.length === 0) {
-    return (
-      <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-8 text-center">
-        <Network className="w-6 h-6 text-[#6a716b] mx-auto mb-2" />
-        <p className="text-xs text-[#6a716b] dark:text-[#8d948e]">
-          Add cases, metadata fields, or tags to generate an interactive Nexus relationship map and axis matrix.
-        </p>
-      </div>
-    );
-  }
+  const emptySelectionNotice =
+    graph.nodes.length === 0 && viewMode !== 'stratigraphic';
 
   const presetAxes =
     graph.scope === 'portfolio'
@@ -225,8 +255,77 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Interactive Case Selection Filter Bar (Portfolio & Public Cross-Reference) */}
+      {selectableCases && selectableCases.length > 0 && selectedCaseIds && onToggleCaseId && (
+        <div className="bg-[#faf8f4] dark:bg-[#141715] border border-[#ddd8ce] dark:border-[#262b27] p-3.5 sm:p-4 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-mono-tabular uppercase tracking-[0.1em] text-[#4a514b] dark:text-[#9ca39d]">
+              Select Cases to Cross-Reference &amp; Map ({selectedCaseIds.length} of{' '}
+              {selectableCases.length} selected)
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              {onSelectAllCases && (
+                <button
+                  type="button"
+                  onClick={onSelectAllCases}
+                  className={`font-semibold hover:underline cursor-pointer ${
+                    isEmber
+                      ? 'text-[#ef4423] dark:text-[#ff6b3d]'
+                      : 'text-[#2d5a3d] dark:text-[#7fb892]'
+                  }`}
+                >
+                  Select All
+                </button>
+              )}
+              {onClearCases && (
+                <>
+                  <span className="text-[#ddd8ce] dark:text-[#262b27]">|</span>
+                  <button
+                    type="button"
+                    onClick={onClearCases}
+                    className="font-medium text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9] cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {selectableCases.map((c) => {
+              const checked = selectedCaseIds.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onToggleCaseId(c.id)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border transition-colors cursor-pointer max-w-full ${
+                    checked
+                      ? isEmber
+                        ? 'bg-[#ef4423] text-white border-[#ef4423]'
+                        : 'bg-[#1a2e24] text-[#faf8f4] border-[#1a2e24] dark:bg-[#7fb892] dark:text-[#0c0e0c] dark:border-[#7fb892]'
+                      : 'bg-[#f3f0e9] dark:bg-[#111413] text-[#4a514b] dark:text-[#9ca39d] border-[#ddd8ce] dark:border-[#262b27] hover:border-[#0f1210] dark:hover:border-[#8d948e]'
+                  }`}
+                >
+                  {checked ? (
+                    <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5 shrink-0 opacity-65" />
+                  )}
+                  <span className="font-mono-tabular text-[10px] opacity-85 shrink-0">
+                    {c.caseNumber || 'CASE'}
+                  </span>
+                  <span className="truncate max-w-[180px] sm:max-w-[220px]">{c.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Header + View Mode Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#0f1210] dark:text-[#f3f0e9]">
             <GitFork
@@ -241,29 +340,69 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
           )}
         </div>
 
-        {/* Visualization Mode Tabs */}
-        <div className="flex items-center border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] shrink-0 self-start md:self-auto">
+        {/* Visualization Mode Tabs (Mobile-Scrollable) */}
+        <div className="flex items-center border border-[#ddd8ce] dark:border-[#262b27] bg-[#faf8f4] dark:bg-[#161916] overflow-x-auto max-w-full shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode('kumu');
+              setSelectedMatrixCell(null);
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+              viewMode === 'kumu'
+                ? isEmber
+                  ? 'bg-[#ef4423] text-white'
+                  : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                : 'text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Systemic Map (Kumu)</span>
+          </button>
           <button
             type="button"
             onClick={() => {
               setViewMode('constellation');
               setSelectedMatrixCell(null);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
               viewMode === 'constellation'
-                ? 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                ? isEmber
+                  ? 'bg-[#ef4423] text-white'
+                  : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
                 : 'text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
             }`}
           >
             <Network className="w-3.5 h-3.5" />
             <span>Relationship Web</span>
           </button>
+          {stratigraphicData && (
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('stratigraphic');
+                setSelectedMatrixCell(null);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
+                viewMode === 'stratigraphic'
+                  ? isEmber
+                    ? 'bg-[#ef4423] text-white'
+                    : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                  : 'text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Stratigraphic Map</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setViewMode('matrix')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
               viewMode === 'matrix'
-                ? 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                ? isEmber
+                  ? 'bg-[#ef4423] text-white'
+                  : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
                 : 'text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
             }`}
           >
@@ -276,9 +415,11 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
               setViewMode('chronology');
               setSelectedMatrixCell(null);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-l border-[#ddd8ce] dark:border-[#262b27] transition-colors cursor-pointer whitespace-nowrap ${
               viewMode === 'chronology'
-                ? 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                ? isEmber
+                  ? 'bg-[#ef4423] text-white'
+                  : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
                 : 'text-[#6a716b] dark:text-[#8d948e] hover:text-[#0f1210] dark:hover:text-[#f3f0e9]'
             }`}
           >
@@ -289,7 +430,7 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
       </div>
 
       {/* Mode-Specific Controls */}
-      {viewMode === 'constellation' && (
+      {(viewMode === 'constellation' || viewMode === 'kumu') && !emptySelectionNotice && (
         <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
@@ -408,11 +549,47 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
         </div>
       )}
 
-      {/* Main Viewport + Inspector Rail */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        <div className="lg:col-span-8 bg-[#faf8f4] dark:bg-[#111413] border border-[#ddd8ce] dark:border-[#262b27] relative overflow-hidden flex flex-col justify-between">
-          {/* VIEW 1: RELATIONSHIP WEB SVG */}
-          {viewMode === 'constellation' && (
+      {/* Main Viewport: Stratigraphic Full-Width OR 8+4 Graph & Inspector */}
+      {viewMode === 'stratigraphic' && stratigraphicData ? (
+        <div className="bg-[#faf8f4] dark:bg-[#111413] border border-[#ddd8ce] dark:border-[#262b27] overflow-hidden">
+          <StratigraphicMap
+            data={stratigraphicData}
+            accentVariant={accentVariant}
+            onOpenStratum={onOpenStratumCase}
+          />
+        </div>
+      ) : emptySelectionNotice ? (
+        <div className="bg-[#faf8f4] dark:bg-[#161916] border border-[#ddd8ce] dark:border-[#262b27] p-10 text-center">
+          <Network className="w-6 h-6 text-[#6a716b] mx-auto mb-2" />
+          <p className="text-xs text-[#6a716b] dark:text-[#8d948e]">
+            {selectableCases && selectableCases.length > 0
+              ? 'Select at least one case above to render its systemic relationships, Kumu network diagram, and cross-case matrix.'
+              : 'Add cases, metadata fields, or tags to generate an interactive Nexus relationship map and axis matrix.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <div className="lg:col-span-8 bg-[#faf8f4] dark:bg-[#111413] border border-[#ddd8ce] dark:border-[#262b27] relative overflow-hidden flex flex-col justify-between">
+            {/* VIEW 0: KUMU LEGAL SYSTEMIC DIAGRAM */}
+            {viewMode === 'kumu' && (
+              <KumuSystemicMap
+                graph={graph}
+                visibleNodes={visibleNodes}
+                visibleEdges={visibleEdges}
+                selectedNodeId={effectiveSelectedNodeId}
+                hoveredNodeId={hoveredNodeId}
+                onSelectNodeId={(id) => {
+                  setSelectedNodeId(id);
+                  setSelectedMatrixCell(null);
+                }}
+                onHoverNodeId={setHoveredNodeId}
+                accentVariant={accentVariant}
+                compact={compact}
+              />
+            )}
+
+            {/* VIEW 1: RELATIONSHIP WEB SVG */}
+            {viewMode === 'constellation' && (
             <>
               <svg
                 viewBox="0 0 1000 580"
@@ -1131,9 +1308,13 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectCaseId(selectedNode.refId!)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210] hover:opacity-85 cursor-pointer"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:opacity-90 cursor-pointer ${
+                      isEmber
+                        ? 'bg-[#ef4423] text-white'
+                        : 'bg-[#0f1210] text-[#faf8f4] dark:bg-[#f3f0e9] dark:text-[#0f1210]'
+                    }`}
                   >
-                    <span>Open Case Workspace</span>
+                    <span>{openCaseButtonLabel}</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -1152,7 +1333,8 @@ export const NexusMapView: React.FC<NexusMapViewProps> = ({
             </div>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Detected Patterns & Insights Row */}
       {graph.insights.length > 0 && (

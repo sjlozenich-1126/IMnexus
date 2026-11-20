@@ -22,6 +22,7 @@ import { auth } from '../firebase';
 import {
   claimInvitedCaseMembership,
   createCaseRecord,
+  fetchSectionsForCases,
   subscribeActivityLogs,
   subscribeCases,
   subscribeCollections,
@@ -31,6 +32,7 @@ import {
 import type {
   ActivityLog,
   CaseRecord,
+  CaseSection,
   CaseStatus,
   CaseType,
   EvidenceCollection,
@@ -38,11 +40,15 @@ import type {
   VaultItem,
 } from '../types';
 import { exportCasesPortfolioCsv } from '../utils/exportReports';
-import { buildPortfolioNexus } from '../utils/nexusEngine';
+import {
+  buildPortfolioNexus,
+  buildStratigraphicMap,
+  type StratigraphicCaseInput,
+} from '../utils/nexusEngine';
 import { AccessRolesView } from './AccessRolesView';
 import { BrandMark, StatusLabel } from './BrandMark';
 import { CaseWorkspace } from './CaseWorkspace';
-import { NexusMapView } from './NexusMapView';
+import { NexusMapView, type SelectableNexusCase } from './NexusMapView';
 import { ReportsAnalyticsView } from './ReportsAnalyticsView';
 import { VaultAndEvidenceView } from './VaultAndEvidenceView';
 
@@ -85,6 +91,8 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [workspaceUsers, setWorkspaceUsers] = useState<UserProfile[]>([]);
   const [idToken, setIdToken] = useState<string | null>(null);
+  const [selectedNexusCaseIds, setSelectedNexusCaseIds] = useState<string[] | null>(null);
+  const [caseSectionsMap, setCaseSectionsMap] = useState<Record<string, CaseSection[]>>({});
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -179,10 +187,78 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
     [vaultItems, effectiveCases]
   );
 
-  const portfolioNexusGraph = useMemo(
-    () => buildPortfolioNexus({ cases: effectiveCases, vaultItems, collections }),
-    [effectiveCases, vaultItems, collections]
+  useEffect(() => {
+    if (view !== 'nexus' || effectiveCases.length === 0) return;
+    let mounted = true;
+    const missingIds = effectiveCases
+      .map((c) => c.id)
+      .filter((id) => !(id in caseSectionsMap));
+    if (missingIds.length === 0) return;
+    fetchSectionsForCases(missingIds).then((loaded) => {
+      if (mounted) {
+        setCaseSectionsMap((prev) => ({ ...prev, ...loaded }));
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [view, effectiveCases, caseSectionsMap]);
+
+  const effectiveNexusCaseIds = useMemo(
+    () =>
+      selectedNexusCaseIds === null
+        ? effectiveCases.map((c) => c.id)
+        : selectedNexusCaseIds.filter((id) => effectiveCases.some((c) => c.id === id)),
+    [selectedNexusCaseIds, effectiveCases]
   );
+
+  const selectableNexusCases = useMemo<SelectableNexusCase[]>(
+    () =>
+      effectiveCases.map((c) => ({
+        id: c.id,
+        caseNumber: c.caseNumber,
+        title: c.title,
+        status: c.status,
+        caseType: c.caseType,
+      })),
+    [effectiveCases]
+  );
+
+  const portfolioNexusGraph = useMemo(
+    () =>
+      buildPortfolioNexus({
+        cases: effectiveCases,
+        vaultItems,
+        collections,
+        selectedCaseIds: effectiveNexusCaseIds,
+      }),
+    [effectiveCases, vaultItems, collections, effectiveNexusCaseIds]
+  );
+
+  const consoleStratigraphicData = useMemo(() => {
+    const inputs: StratigraphicCaseInput[] = effectiveCases
+      .filter((c) => effectiveNexusCaseIds.includes(c.id))
+      .map((c) => {
+        const createdMs =
+          c.createdAt && typeof c.createdAt === 'object' && 'toMillis' in c.createdAt
+            ? (c.createdAt as { toMillis: () => number }).toMillis()
+            : undefined;
+        return {
+          id: c.id,
+          slug: c.publicSlug,
+          caseNumber: c.caseNumber,
+          title: c.title,
+          status: c.status,
+          court: c.court,
+          arrestDates: c.arrestDates,
+          closureDate: c.closureDate,
+          createdAtMs: createdMs,
+          tags: c.tags,
+          sections: caseSectionsMap[c.id] || [],
+        };
+      });
+    return buildStratigraphicMap(inputs);
+  }, [effectiveCases, effectiveNexusCaseIds, caseSectionsMap]);
 
   const selectedCase = useMemo(
     () => effectiveCases.find((c) => c.id === selectedCaseId) || null,
@@ -901,15 +977,34 @@ export const ConsoleApp: React.FC<ConsoleAppProps> = ({
             <div className="space-y-5 max-w-6xl">
               <div>
                 <h1 className="text-lg font-semibold tracking-[-0.02em]">
-                  IMnexus Portfolio Connection Map
+                  IMnexus Portfolio Connection &amp; Systemic Map
                 </h1>
                 <p className="text-xs text-[#6a716b] dark:text-[#8d948e] mt-0.5">
-                  Explore cross-case patterns across metadata attributes (jurisdiction, lead, subject, disposition, custom fields), shared #tags, curated collections, and multi-axis matrices.
+                  Select which cases to cross-reference across the Kumu Legal Systemic Diagram, Relationship Web, Procedural &amp; Institutional Stratigraphic Map, Axis Matrix, and Chronology Axis.
                 </p>
               </div>
               <NexusMapView
                 graph={portfolioNexusGraph}
-                subtitle="Switch between Relationship Web, configurable X×Y Axis Matrix, and Chronology Axis views."
+                defaultViewMode="kumu"
+                openCaseButtonLabel="Open Case Workspace"
+                subtitle="Select cases below to isolate relationships across metadata hubs, #tags, collections, and procedural strata."
+                selectableCases={selectableNexusCases}
+                selectedCaseIds={effectiveNexusCaseIds}
+                onToggleCaseId={(id) => {
+                  const base =
+                    selectedNexusCaseIds === null
+                      ? effectiveCases.map((c) => c.id)
+                      : selectedNexusCaseIds;
+                  setSelectedNexusCaseIds(
+                    base.includes(id) ? base.filter((x) => x !== id) : [...base, id]
+                  );
+                }}
+                onSelectAllCases={() =>
+                  setSelectedNexusCaseIds(effectiveCases.map((c) => c.id))
+                }
+                onClearCases={() => setSelectedNexusCaseIds([])}
+                stratigraphicData={consoleStratigraphicData}
+                onOpenStratumCase={(stratum) => openCase(stratum.caseId)}
                 onSelectCaseId={openCase}
                 onInspectNodeArtifact={(node) => {
                   if (node.kind === 'document') setView('documents');

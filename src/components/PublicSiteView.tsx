@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   Download,
   ExternalLink,
   FileText,
@@ -8,6 +9,7 @@ import {
   Layers,
   Moon,
   Music,
+  Network,
   Play,
   ShieldCheck,
   Sun,
@@ -17,11 +19,9 @@ import type { MediaType, PublicSite } from '../types';
 import { fetchPublicSiteBySlug } from '../services/firestoreService';
 import { exportPublicSitePdf } from '../utils/exportReports';
 import { parseVideoEmbed } from '../utils/mediaEmbed';
-import { buildPublicSiteNexus } from '../utils/nexusEngine';
 import { formatBytes } from '../utils/vaultApi';
 import { BrandMark, StatusLabel } from './BrandMark';
 import { EmbeddedVideoFrame } from './EmbeddedVideoFrame';
-import { NexusMapView } from './NexusMapView';
 import { PublicTipBox } from './PublicTipBox';
 import { RichTextContent } from './RichTextEditor';
 import { VaultDownloadLink, VaultImage, useResolvedVaultUrl } from './VaultMedia';
@@ -30,7 +30,7 @@ interface PublicSiteViewProps {
   slug: string;
   darkMode: boolean;
   onToggleDarkMode: () => void;
-  onNavigateArchive: () => void;
+  onNavigateArchive: (hash?: string) => void;
   onNavigateConsole: () => void;
   isAuthenticated: boolean;
 }
@@ -146,11 +146,6 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
     };
   }, [slug]);
 
-  const siteNexusGraph = useMemo(
-    () => (site ? buildPublicSiteNexus(site) : null),
-    [site]
-  );
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f3f0e9] dark:bg-[#0c0e0c] text-[#0f1210] dark:text-[#f3f0e9] flex items-center justify-center p-6">
@@ -177,7 +172,7 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
           <div className="flex flex-wrap justify-center gap-3">
             <button
               type="button"
-              onClick={onNavigateArchive}
+              onClick={() => onNavigateArchive()}
               className="px-4 py-2 text-xs font-medium bg-[#ef4423] text-white hover:bg-[#d63618] cursor-pointer"
             >
               Browse Public Archive
@@ -201,7 +196,6 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
 
   const navLinks = [
     { href: '#overview', label: 'Overview', show: true },
-    { href: '#nexus', label: 'Nexus Map', show: Boolean(siteNexusGraph) },
     { href: '#timeline', label: 'Timeline', show: Boolean(site.timeline?.length) },
     { href: '#actors', label: 'Actors', show: Boolean(site.actors?.length) },
     { href: '#narrative', label: 'Narrative', show: Boolean(site.sections?.length) },
@@ -281,7 +275,7 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
-              onClick={onNavigateArchive}
+              onClick={() => onNavigateArchive()}
               className="inline-flex items-center gap-1.5 font-semibold text-[#ef4423] dark:text-[#ff6b3d] hover:underline cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -416,34 +410,28 @@ export const PublicSiteView: React.FC<PublicSiteViewProps> = ({
           </div>
         </section>
 
-        {/* Visual Nexus: Connections, Patterns & Insights */}
-        {siteNexusGraph && (
-          <section id="nexus" className="pt-8 border-t border-[#ddd8ce] dark:border-[#262b27]">
-            <div className="font-mono-tabular text-[11px] font-semibold uppercase tracking-[0.14em] text-[#ef4423] dark:text-[#ff6b3d] mb-2">
-              Relational Intelligence
+        {/* Cross-Case Systemic Mapping Callout (Lives in Public Archive #nexus) */}
+        <section className="bg-[#faf8f4] dark:bg-[#141715] border border-[#ddd8ce] dark:border-[#262b27] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Network className="w-5 h-5 text-[#ef4423] dark:text-[#ff6b3d] shrink-0 mt-0.5" />
+            <div>
+              <div className="font-mono-tabular text-[10px] font-semibold uppercase tracking-[0.12em] text-[#ef4423] dark:text-[#ff6b3d]">
+                Cross-Case Systemic Analysis
+              </div>
+              <p className="text-xs sm:text-sm text-[#2b302c] dark:text-[#c4bfb4] mt-0.5">
+                Compare this dossier against other archive cases inside the Public Nexus, Kumu Systemic Diagram, and Procedural Stratigraphic Map.
+              </p>
             </div>
-            <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold tracking-tight mb-6 text-[#0f1210] dark:text-[#f3f0e9]">
-              Nexus Connections, Patterns &amp; Insights
-            </h2>
-            <NexusMapView
-              graph={siteNexusGraph}
-              accentVariant="ember"
-              subtitle="Explore relationships across case metadata, tags, actors, collections, and chronology via Relationship Web, configurable Axis Matrix, and Chronology Axis."
-              onInspectNodeArtifact={(node) =>
-                setPreviewItem({
-                  title: node.label,
-                  mediaType: (node.mediaType as MediaType) || 'file',
-                  fileId: node.fileId,
-                  fileName: node.fileName,
-                  sha256: node.sha256,
-                  textContent: node.textContent,
-                  embedUrl: node.embedUrl,
-                  description: node.description,
-                })
-              }
-            />
-          </section>
-        )}
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateArchive('#nexus')}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#ef4423] hover:bg-[#d63618] text-white shrink-0 cursor-pointer"
+          >
+            <span>Open Cross-Case Nexus Map</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </section>
 
         {/* Chronological Timeline */}
         {Boolean(site.timeline?.length) && (

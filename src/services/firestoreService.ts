@@ -419,7 +419,7 @@ export async function createCaseRecord(params: {
             order: idx + 1,
             title: secTitle,
             content: `Enter structured findings and documented citations for "${secTitle}".`,
-            isPublic: idx < 5,
+            isPublic: idx <= 5,
           })
         )
       );
@@ -1252,4 +1252,24 @@ export async function fetchAllPublishedSites(): Promise<PublicSite[]> {
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, path);
   }
+}
+
+export async function fetchSectionsForCases(
+  caseIds: string[]
+): Promise<Record<string, CaseSection[]>> {
+  const out: Record<string, CaseSection[]> = {};
+  if (caseIds.length === 0) return out;
+  await Promise.all(
+    caseIds.map(async (cid) => {
+      try {
+        const snap = await getDocs(collection(db, 'cases', cid, 'sections'));
+        out[cid] = snap.docs
+          .map((d) => d.data() as CaseSection)
+          .sort((a, b) => a.order - b.order);
+      } catch {
+        out[cid] = [];
+      }
+    })
+  );
+  return out;
 }
